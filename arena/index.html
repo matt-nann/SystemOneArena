@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Jev vs Opus 5.5: arena face-off</title>
+<title>Sol vs Jev: System One Arena</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Lilita+One&display=swap" rel="stylesheet">
@@ -92,40 +92,42 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="crown" viewBox="0 0 24 20"><path d="M2 17V5l5 5 5-8 5 8 5-5v12z"/></symbol></svg>
 <main class="stage">
-  <section class="plate opp" aria-label="Opus 5.5 high">
-    <div class="row"><div class="name">Opus 5.5 · high</div><div class="crowns" id="cr1" aria-label="Towers destroyed"><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg></div></div>
-    <div class="row"><div class="sub">frontier LLM, high effort</div><div class="state" id="st1">ready</div></div>
+  <section class="plate opp" id="plate1" aria-label="Sol">
+    <div class="row"><div class="name" id="nm1">Sol</div><div class="crowns" id="cr1" aria-label="Towers destroyed"><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg></div></div>
+    <div class="row"><div class="sub" id="sub1">frontier LLM</div><div class="state" id="st1">ready</div></div>
     <div class="meter"><div class="drop"><span id="ex1">5</span></div><div class="pips" id="pp1"></div><div class="tally" id="ws1">wasted <strong>0</strong></div><div class="tally" id="dc1">decisions <strong>0</strong></div></div>
   </section>
 
   <div class="field" id="field">
-    <canvas id="cv" role="img" aria-label="Two-lane arena battle between Jev and Opus 5.5"></canvas>
+    <canvas id="cv" role="img" aria-label="Two-lane arena battle between Jev and Sol"></canvas>
     <div class="overlay show" id="start">
-      <div class="vs"><span class="a">Opus 5.5 · high</span><span class="mid">versus</span><span class="b">Jev</span></div>
-      <div class="lat">5.99s per decision against 0.36s</div>
+      <div class="vs"><span class="a" id="vsA">Sol</span><span class="mid">versus</span><span class="b" id="vsB">Jev</span></div>
+      <div class="lat" id="lat">5.99s per decision against 0.36s</div>
       <button class="go" id="btnStart">Start match</button>
     </div>
     <div class="overlay" id="result" aria-live="polite">
       <div class="verdict" id="verdict">Jev wins</div>
       <table>
-        <tr><th></th><th class="j">Jev</th><th class="o">Opus 5.5</th></tr>
+        <tr><th></th><th class="j" id="th0">Jev</th><th class="o" id="th1">Sol</th></tr>
         <tr><td>Decisions made</td><td id="r_d0"></td><td id="r_d1"></td></tr>
         <tr><td>Elixir wasted</td><td id="r_w0"></td><td id="r_w1"></td></tr>
         <tr><td>Towers destroyed</td><td id="r_c0"></td><td id="r_c1"></td></tr>
+        <tr><td>Avg decision time</td><td id="r_t0"></td><td id="r_t1"></td></tr>
+        <tr id="r_err"><td>Failed calls</td><td id="r_e0"></td><td id="r_e1"></td></tr>
       </table>
-      <div class="note">Both sides ran the same playbook. Only the time per decision differed.</div>
+      <div class="note" id="note">Both sides ran the same playbook. Only the time per decision differed.</div>
       <button class="go" id="btnAgain">Play again</button>
     </div>
   </div>
 
-  <section class="plate jev" aria-label="Jev">
+  <section class="plate jev" id="plate0" aria-label="Jev">
     <div class="meter"><div class="drop"><span id="ex0">5</span></div><div class="pips" id="pp0"></div><div class="tally" id="ws0">wasted <strong>0</strong></div><div class="tally" id="dc0">decisions <strong>0</strong></div></div>
-    <div class="row"><div class="name">Jev</div><div class="crowns" id="cr0" aria-label="Towers destroyed"><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg></div></div>
-    <div class="row"><div class="sub">System 1 model</div><div class="state" id="st0">ready</div></div>
+    <div class="row"><div class="name" id="nm0">Jev</div><div class="crowns" id="cr0" aria-label="Towers destroyed"><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg></div></div>
+    <div class="row"><div class="sub" id="sub0">System 1 model</div><div class="state" id="st0">ready</div></div>
   </section>
 
   <footer class="bar">
-    <p>Scripted simulation. Same playbook on both sides, only decision time differs.</p>
+    <p id="foot">Scripted preview. Same playbook on both sides, assumed decision times. Run the local server for a live match.</p>
     <div><button class="chip" id="btnSpeed" aria-label="Playback speed">1×</button><button class="chip" id="btnRestart">Restart</button></div>
   </footer>
 </main>
@@ -145,8 +147,8 @@ function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=
 function createSim(cfg){
   const R=rng(cfg.seed||7);
   const S={t:0,dur:cfg.duration,over:false,winner:null,reason:'',units:[],shots:[],fx:[],log:[],nid:1,
-    sides:[0,1].map(i=>({elixir:5,wasted:0,decisions:0,plays:0,late:0,crowns:0,hand:DECK.slice(0,4),queue:DECK.slice(4),
-      pending:null,last:null,lat:cfg.latency[i],jit:cfg.jitter[i],lats:[]})),
+    sides:[0,1].map(i=>({elixir:5,wasted:0,decisions:0,plays:0,late:0,crowns:0,errors:0,invalid:0,hand:DECK.slice(0,4),queue:DECK.slice(4),
+      pending:null,last:null,lat:cfg.latency[i],jit:cfg.jitter[i],lats:[],modelMs:[],lastError:null})),
     towers:[]};
   const mk=(side,kind,x,y)=>{const k=kind==='K';S.towers.push({side,kind,x,y,hp:k?cfg.kingHp:cfg.towerHp,max:k?cfg.kingHp:cfg.towerHp,alive:true,cd:0,r:k?1.4:1.1,range:k?6:6.5,dmg:k?70:60,rate:k?0.9:0.8,hit:0})};
   mk(0,'L',LANES[0],22.5);mk(0,'R',LANES[1],22.5);mk(0,'K',9,25.6);
@@ -193,6 +195,46 @@ function createSim(cfg){
     return{card:null,why:'wait'};
   }
 
+  // Where a card would go in each lane, fixed when a remote decision starts so a
+  // slow answer lands on the board it was asked about.
+  function laneCtx(side,lane){
+    const foe=1-side,mine=u=>side===0?u.y>RIVER-2.5:u.y<RIVER+2.5;
+    const E=S.units.filter(u=>u.side===foe&&u.lane===lane&&mine(u));
+    if(E.length)return{spot:'defend',ids:E.map(u=>u.id)};
+    if(S.units.some(u=>u.side===side&&u.lane===lane&&(u.type==='giant'||u.type==='knight')))return{spot:'support'};
+    return{spot:'bridge'};
+  }
+  // The board from one side's point of view (lanes and distances mirrored for the top side).
+  function snapshot(side){
+    const foe=1-side,me=S.sides[side],k=tower(side,'K');
+    const tr=u=>({type:u.type,hp:Math.ceil(u.hp),tiles_from_your_king:+Math.abs(u.y-k.y).toFixed(1)});
+    return{
+      timeLeft:Math.max(0,Math.ceil(S.dur-S.t)),elixir:Math.floor(me.elixir+1e-6),hand:me.hand.slice(),
+      crowns:{you:me.crowns,opponent:S.sides[foe].crowns},
+      kings:{your_hp:Math.ceil(k.hp),their_hp:Math.ceil(tower(foe,'K').hp)},
+      lanes:[0,1].map(lane=>{const mine=laneCtx(side,lane);return{
+        your_tower_hp:Math.ceil(princess(side,lane).hp),their_tower_hp:Math.ceil(princess(foe,lane).hp),
+        your_troops:S.units.filter(u=>u.side===side&&u.lane===lane).map(tr),
+        their_troops:S.units.filter(u=>u.side===foe&&u.lane===lane).map(tr),
+        enemy_troops_on_your_side:mine.spot==='defend'?mine.ids.length:0}})
+    };
+  }
+  function askRemote(i){
+    const s=S.sides[i];
+    // Nothing affordable means nothing to decide: check again shortly, no call made.
+    if(!s.hand.some(c=>CARDS[c].cost<=s.elixir)){s.pending={start:S.t,due:S.t+0.25,auto:true,action:{card:null,why:'wait'}};return}
+    const p={start:S.t,due:Infinity,remote:true,ctx:[laneCtx(i,0),laneCtx(i,1)]};s.pending=p;
+    cfg.decide(i,snapshot(i)).then(r=>{
+      if(s.pending!==p||S.over)return;
+      if(r.card){const c=p.ctx[r.lane];p.action={card:r.card,lane:r.lane,spot:c.spot,why:c.spot==='defend'?'defend':'push',ids:c.ids}}
+      else p.action={card:null,why:'wait'};
+      p.modelMs=r.ms;p.ready=true;
+    },err=>{
+      if(s.pending!==p||S.over)return;
+      s.errors++;s.lastError=String(err&&err.message||err);p.action={card:null,why:'error'};p.ready=true;
+    });
+  }
+
   function spotPos(side,lane,spot){
     const f=fwd(side),lx=LANES[lane],p=princess(side,lane),k=tower(side,'K');
     if(spot==='defend'){
@@ -226,16 +268,22 @@ function createSim(cfg){
     for(const s of S.sides){s.elixir+=cfg.elixirRate*dt;if(s.elixir>10){s.wasted+=s.elixir-10;s.elixir=10}}
     for(let i=0;i<2;i++){
       const s=S.sides[i];
-      if(s.pending&&S.t>=s.pending.due){
-        const a=s.pending.action,lat=s.pending.due-s.pending.start;
+      if(s.pending&&(s.pending.ready||S.t>=s.pending.due)){
+        const P=s.pending,a=P.action,lat=S.t-P.start;
+        s.pending=null;
+        if(P.auto)continue;
+        // A model may only pick from cards it could afford when asked, and elixir only rises while it thinks.
+        if(a.card&&!(s.hand.includes(a.card)&&CARDS[a.card].cost<=s.elixir)){s.invalid++;a.card=null}
         let late=false;
         if(a.card&&a.why==='defend'){late=!a.ids.some(id=>S.units.some(u=>u.id===id));if(late)s.late++}
         if(a.card)deploy(i,a);
-        s.decisions++;s.lats.push(lat);
+        s.decisions++;s.lats.push(lat);if(P.modelMs!=null)s.modelMs.push(P.modelMs);
         s.last={card:a.card,lane:a.lane,why:a.why,lat,at:S.t,late};
-        s.pending=null;
       }
-      if(!s.pending){const lat=Math.max(0.05,s.lat+(R()*2-1)*s.jit);s.pending={start:S.t,due:S.t+lat,action:policy(i)}}
+      if(!s.pending){
+        if(cfg.remote&&cfg.remote[i])askRemote(i);
+        else{const lat=Math.max(0.05,s.lat+(R()*2-1)*s.jit);s.pending={start:S.t,due:S.t+lat,action:policy(i)}}
+      }
     }
     for(const u of S.units){
       if(u.hp<=0)continue;
@@ -285,7 +333,7 @@ function createSim(cfg){
 /* ===== END SIM ===== */
 /* ===== UI ===== */
 const CFG={seed:13,duration:60,latency:[0.36,5.99],jitter:[0.05,0.7],elixirRate:1,towerHp:3800,kingHp:6000};
-const NAMES=['Jev','Opus 5.5'], MARK=['JEV','OPUS 5.5'];
+let NAMES=['Jev','Sol'], MARK=['JEV','SOL'], LIVE=null, MATCH='';
 const $=id=>document.getElementById(id);
 const cv=$('cv'),field=$('field'),bg=document.createElement('canvas');
 let ctx=cv.getContext('2d');
@@ -494,6 +542,7 @@ function hud(){
     if(mode==='idle'){put('st'+i,'ready','state');continue}
     const el=s.pending?S.t-s.pending.start:0;
     if(mode==='run'&&s.pending&&el>0.5)put('st'+i,'thinking… '+el.toFixed(1)+'s','state thinking');
+    else if(s.last&&s.last.why==='error')put('st'+i,'⚠ call failed','state thinking');
     else if(s.last)put('st'+i,'✓ decided in '+s.last.lat.toFixed(2)+'s','state');
     else put('st'+i,'thinking… '+el.toFixed(1)+'s','state thinking');
   }
@@ -504,9 +553,24 @@ function finish(){
   $('r_d0').textContent=a.decisions;$('r_d1').textContent=b.decisions;
   $('r_w0').textContent=a.wasted.toFixed(1);$('r_w1').textContent=b.wasted.toFixed(1);
   $('r_c0').textContent=a.crowns;$('r_c1').textContent=b.crowns;
+  const avg=s=>s.lats.length?(s.lats.reduce((x,y)=>x+y,0)/s.lats.length).toFixed(2)+'s':'–';
+  $('r_t0').textContent=avg(a);$('r_t1').textContent=avg(b);
+  $('r_e0').textContent=a.errors;$('r_e1').textContent=b.errors;$('r_err').hidden=!LIVE;
+  if(LIVE){const side=s=>({decisions:s.decisions,plays:s.plays,elixirWasted:+s.wasted.toFixed(1),crowns:s.crowns,lateDefences:s.late,
+      failedCalls:s.errors,invalidMoves:s.invalid,avgDecisionSeconds:s.lats.length?s.lats.reduce((x,y)=>x+y,0)/s.lats.length:null,
+      avgModelMs:s.modelMs.length?s.modelMs.reduce((x,y)=>x+y,0)/s.modelMs.length:null});
+    fetch('/api/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({match:MATCH,result:{
+      winner:LIVE.players[S.winner].id,reason:S.reason,seconds:+S.t.toFixed(1),[LIVE.players[0].id]:side(a),[LIVE.players[1].id]:side(b)}})}).catch(()=>{})}
   $('result').classList.add('show');$('btnAgain').focus({preventScroll:true});
 }
-function reset(run){sim=createSim(CFG);acc=0;endAt=0;for(const k in cache)delete cache[k];
+function matchCfg(){
+  if(!LIVE)return CFG;
+  MATCH=new Date().toISOString().replace(/[:.]/g,'-');
+  return{...CFG,remote:[true,true],decide:(i,snapshot)=>fetch('/api/decide/'+LIVE.players[i].id,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({match:MATCH,snapshot})})
+    .then(r=>r.json().then(j=>{if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}))};
+}
+function reset(run){sim=createSim(matchCfg());acc=0;endAt=0;for(const k in cache)delete cache[k];
   $('result').classList.remove('show');$('start').classList.toggle('show',!run);mode=run?'run':'idle'}
 function frame(now){
   const dt=Math.min(0.1,(now-prev)/1000||0);prev=now;clock+=dt;
@@ -519,6 +583,28 @@ $('btnStart').onclick=()=>reset(true);
 $('btnAgain').onclick=()=>reset(true);
 $('btnRestart').onclick=()=>reset(false);
 $('btnSpeed').onclick=()=>{speed=speed===1?2:1;$('btnSpeed').textContent=speed+'×'};
+// Opened through server/server.js: both sides ask their model for every move.
+// Opened as a plain file: the scripted preview above.
+function applyNames(){
+  for(const i of[0,1]){$('nm'+i).textContent=NAMES[i];$('th'+i).textContent=NAMES[i];$('plate'+i).setAttribute('aria-label',NAMES[i])}
+  $('vsA').textContent=NAMES[1];$('vsB').textContent=NAMES[0];
+  cv.setAttribute('aria-label','Two-lane arena battle between '+NAMES[0]+' and '+NAMES[1]);
+  document.title=NAMES[1]+' vs '+NAMES[0]+': System One Arena';
+  paintGround();
+}
+applyNames();
+fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(c=>{
+  if(!c||!c.live)return;
+  LIVE=c;NAMES=c.players.map(p=>p.name);MARK=NAMES.map(n=>n.toUpperCase());
+  const p=c.players,dry=c.dryRun?' (dry run)':'';
+  $('sub0').textContent=p[0].model+dry;$('sub1').textContent=p[1].model+(p[1].effort?' · '+p[1].effort:'')+dry;
+  $('lat').textContent=c.dryRun?'Dry run: no model is called':'Live: every move is a real model call';
+  $('note').textContent=c.dryRun?'Dry run: canned answers through the live pipeline.':'Both sides got the same board and options. Each move came from its model.';
+  $('foot').textContent=c.dryRun?'Dry run through the live pipeline. Answers are canned, no model is called.'
+    :'Live match. Every move is a real OpenRouter call; the clock keeps running while a model thinks.';
+  speed=1;$('btnSpeed').hidden=true;
+  applyNames();
+}).catch(()=>{});
 requestAnimationFrame(frame);
 </script>
 </body>

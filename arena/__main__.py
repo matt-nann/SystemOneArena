@@ -46,7 +46,7 @@ def create_app():
 def main() -> None:
     logger.info("System One Arena on http://localhost:{}", settings.PORT)
     try:
-        # Dual-stack, as Aven's services do: Railway's private network is IPv6.
+        # Dual-stack, so the service accepts both IPv4 and IPv6 connections.
         sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     except OSError:
         uvicorn.run(create_app(), host="0.0.0.0", port=settings.PORT)

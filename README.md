@@ -33,6 +33,21 @@ uv run python -m arena                 # http://localhost:8000
 
 Open `http://localhost:8000` and press **Start match**. With `ARENA_ADMIN_TOKEN` set, only `http://localhost:8000/?admin=<token>` shows the button. Everyone else just watches.
 
+## Run it cheaply: Jev against Jev
+
+Both sides on the Decisions endpoint, a short match, one call per side per second at most, and a hard cap:
+
+```sh
+SOL_API=decisions
+SOL_MODEL=typesafe/jev-1.13
+SOL_NAME="Jev 2"
+MATCH_SECONDS=30
+DECISION_MIN_INTERVAL=1
+MAX_CALLS_PER_MATCH=60
+```
+
+That is at most 60 calls a match (about 50 in practice). Each match's result in `logs/<id>.jsonl` records `calls` and `cost_usd` per side, summed from the `usage.cost` OpenRouter returns. When the cap is reached, no more requests go out and the match ends where it stands.
+
 ## Mock OpenRouter
 
 `mock_openrouter/` stands in for OpenRouter itself. It serves the same paths and wire format (`POST /api/v1/chat/completions`, `POST /api/alpha/decisions`, `GET /api/v1/models`), so the real client code runs unchanged against it. It follows the pattern of Aven's `tests/stubs/llm`, scripted responses plus `/admin/*`, but speaks OpenRouter's format instead of Aven's internal one, and it also covers Decisions.
@@ -64,7 +79,7 @@ Requests that aren't arena moves get schema-valid defaults: `noul` / `choice` / 
 
 | Admin endpoint | Does |
 | --- | --- |
-| `POST /admin/script` `{"model": "openai/gpt-6-sol", "responses": [...]}` | Queue responses: `{"card": "giant", "lane": "left"}`, `{"error": {"status": 429, "message": "..."}}`, `{"timeout": true}`, `{"malformed": true}`, each optionally with `"latency_ms"`. `"model": "*"` matches any model. |
+| `POST /admin/script` `{"model": "openai/gpt-6-sol", "responses": [...]}` | Queue responses: `{"card": "brute", "lane": "left"}`, `{"error": {"status": 429, "message": "..."}}`, `{"timeout": true}`, `{"malformed": true}`, each optionally with `"latency_ms"`. `"model": "*"` matches any model. |
 | `PUT /admin/profiles/{model}` | Set a model's `latency_ms`, `jitter_ms`, `error_rate`, `error`, `strategy`. |
 | `GET /admin/profiles` | The current profiles and endpoint defaults. |
 | `GET /admin/calls?endpoint=&model=` | Every request received. |
@@ -112,7 +127,7 @@ It runs in three modes, with the same drawing code:
 
 ### Art
 
-Units, buildings, water, bridges, trees and effects are [Tiny Swords](https://pixelfrog-assets.itch.io/tiny-swords) by Pixel Frog, the CC0 release ("TS_old version_CC0 Licensed", Update 010), committed under `web/tinyswords/`. Knights are Warriors, archers are Archers, the swarm is torch goblins, the bomber is a TNT goblin, and the giant, which only attacks buildings, is a Pawn at 2.2× that hammers the tower. Each princess tower has an archer on top, and destroyed towers turn to burning ruins. To refresh the files from the zip:
+Units, buildings, water, bridges, trees and effects are [Tiny Swords](https://pixelfrog-assets.itch.io/tiny-swords) by Pixel Frog, the CC0 release ("TS_old version_CC0 Licensed", Update 010), committed under `web/tinyswords/`. The five units are named for what you see and described to the models in one vocabulary: a class, a weight, an attack and what it targets. The Warrior is a medium mini tank, Archers are light ranged support, Goblins (four torch goblins) are a light swarm, the Dynamiter (a TNT goblin) is light splash, and the Brute (a big Pawn with a hammer) is the heavy win condition that only hits buildings. Matchups are written between classes ("splash beats swarm"), and troops on the board carry their class too. See `UNIT_CLASS` in `arena/engine/game.py`. Each princess tower has an archer on top, and destroyed towers turn to burning ruins. To refresh the files from the zip:
 
 ```sh
 uv run python tools/tinyswords.py "~/Downloads/Tiny Swords.zip"
@@ -144,3 +159,4 @@ The suite runs without network. It covers the frame fields the viewer draws (dec
 | `web/demo-sim.js` | Browser port of the engine and playbook, for `?demo` only |
 | `web/tinyswords/` | Tiny Swords art (CC0) and its license note |
 | `tools/tinyswords.py` | Copies the art the viewer uses out of the Tiny Swords zip |
+| `tools/jev_probe.py` | Asks Jev about hand-made boards and scores its answers, for tuning the wording cheaply |

@@ -5,13 +5,13 @@
 (function(){
 const W=18,H=28,RIVER=14,LANES=[4,14];
 const CARDS={
-  knight:{name:'Knight',cost:3,count:1,hp:900,dmg:120,cd:1.0,range:0.6,speed:2.0,r:0.55},
+  warrior:{name:'Warrior',cost:3,count:1,hp:900,dmg:120,cd:1.0,range:0.6,speed:2.0,r:0.55},
   archers:{name:'Archers',cost:3,count:2,hp:220,dmg:70,cd:0.9,range:4.5,speed:2.0,r:0.38},
-  swarm:{name:'Swarm',cost:2,count:4,hp:70,dmg:45,cd:0.8,range:0.5,speed:2.8,r:0.26},
-  giant:{name:'Giant',cost:5,count:1,hp:2200,dmg:170,cd:1.4,range:0.6,speed:1.4,r:0.8,bo:true},
-  bomber:{name:'Bomber',cost:3,count:1,hp:200,dmg:130,cd:1.5,range:4.0,speed:2.0,r:0.4,splash:1.6},
+  goblins:{name:'Goblins',cost:2,count:4,hp:70,dmg:45,cd:0.8,range:0.5,speed:2.8,r:0.26},
+  brute:{name:'Brute',cost:5,count:1,hp:2200,dmg:170,cd:1.4,range:0.6,speed:1.4,r:0.8,bo:true},
+  dynamiter:{name:'Dynamiter',cost:3,count:1,hp:200,dmg:130,cd:1.5,range:4.0,speed:2.0,r:0.4,splash:1.6},
 };
-const DECK=['knight','archers','giant','swarm','bomber'];
+const DECK=['warrior','archers','brute','goblins','dynamiter'];
 const IDLE_RECHECK=0.25, OWN_HALF=25.6-RIVER+2.5;
 function mulberry32(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -27,15 +27,15 @@ function playbook(st,options){
     const ours=lane.your.filter(t=>t.k<=OWN_HALF);const g=val(en)-val(ours);
     if(g>gap0){best=[l,en];gap0=g}}
   if(best){const kinds=best[1].map(t=>t.type);let p;
-    if(kinds.filter(k=>k==='swarm').length>=3)p=['bomber','archers','knight','swarm'];
-    else if(kinds.includes('giant'))p=['swarm','knight','archers','bomber'];
-    else if(kinds.includes('archers')||kinds.includes('bomber'))p=['knight','swarm','archers','bomber'];
-    else p=['swarm','archers','knight','bomber'];
+    if(kinds.filter(k=>k==='goblins').length>=3)p=['dynamiter','archers','warrior','goblins'];
+    else if(kinds.includes('brute'))p=['goblins','warrior','archers','dynamiter'];
+    else if(kinds.includes('archers')||kinds.includes('dynamiter'))p=['warrior','goblins','archers','dynamiter'];
+    else p=['goblins','archers','warrior','dynamiter'];
     return[first(p),best[0]]}
   for(let l=0;l<2;l++){const mine=st.lanes[l].your;
-    const tank=mine.some(t=>t.type==='giant'||t.type==='knight'),sup=mine.filter(t=>t.type!=='giant'&&t.type!=='knight').length;
-    if(tank&&sup<3&&st.elixir>=4){const c=first(['archers','bomber','swarm','knight']);if(c)return[c,l]}}
-  if(st.elixir>=7){const l=st.lanes[0].theirHp<=st.lanes[1].theirHp?0:1;const c=first(['giant','knight','archers','bomber','swarm']);if(c)return[c,l]}
+    const tank=mine.some(t=>t.type==='brute'||t.type==='warrior'),sup=mine.filter(t=>t.type!=='brute'&&t.type!=='warrior').length;
+    if(tank&&sup<3&&st.elixir>=4){const c=first(['archers','dynamiter','goblins','warrior']);if(c)return[c,l]}}
+  if(st.elixir>=7){const l=st.lanes[0].theirHp<=st.lanes[1].theirHp?0:1;const c=first(['brute','warrior','archers','dynamiter','goblins']);if(c)return[c,l]}
   return[null,0];
 }
 
@@ -57,7 +57,7 @@ class Sim{
   affordable(s){const S=this.sides[s];return S.hand.filter(c=>CARDS[c].cost<=S.elixir)}
   laneCtx(s,l){const en=this.units.filter(u=>u.side===1-s&&u.lane===l&&this.ownHalf(s,u));
     if(en.length)return{spot:'defend',ids:en.map(u=>u.id)};
-    if(this.units.some(u=>u.side===s&&u.lane===l&&(u.type==='giant'||u.type==='knight')))return{spot:'support'};
+    if(this.units.some(u=>u.side===s&&u.lane===l&&(u.type==='brute'||u.type==='warrior')))return{spot:'support'};
     return{spot:'bridge'}}
   state(s){const S=this.sides[s],king=this.tower(s,'K'),tr=u=>({type:u.type,k:Math.round(Math.abs(u.y-king.y)*10)/10});
     return{elixir:Math.floor(S.elixir+1e-6),lanes:[0,1].map(l=>({your:this.units.filter(u=>u.side===s&&u.lane===l).map(tr),their:this.units.filter(u=>u.side!==s&&u.lane===l).map(tr),theirHp:Math.ceil(this.princess(1-s,l).hp)}))}}
@@ -78,7 +78,7 @@ class Sim{
   }
   spotPos(s,l,spot){const f=Sim.fwd(s),lx=LANES[l],p=this.princess(s,l),k=this.tower(s,'K');
     if(spot==='defend')return p.alive?[lx,p.y+f*2.6]:[9+(lx-9)*0.45,k.y+f*3.2];
-    if(spot==='support'){const leads=this.units.filter(u=>u.side===s&&u.lane===l&&(u.type==='giant'||u.type==='knight'));
+    if(spot==='support'){const leads=this.units.filter(u=>u.side===s&&u.lane===l&&(u.type==='brute'||u.type==='warrior'));
       if(leads.length){let lead=leads[0];for(const u of leads)if(f*(u.y-lead.y)>0)lead=u;let y=lead.y-f*2.2;y=s===0?Math.max(y,RIVER+1.2):Math.min(y,RIVER-1.2);return[lx,y]}}
     return[lx,RIVER-f*1.8]}
   deploy(s,card,lane,spot,lat){const me=this.sides[s],c=CARDS[card];me.elixir-=c.cost;me.plays++;

@@ -39,6 +39,7 @@ class MatchRunner:
         self._calls: Set[asyncio.Task] = set()
         self._subscribers: Set[asyncio.Queue] = set()
         self.log_dir = Path(settings.LOG_DIR)
+        self.calls, self.cost = [0, 0], [0.0, 0.0]
 
     @property
     def running(self) -> bool:
@@ -49,7 +50,9 @@ class MatchRunner:
         if self.running:
             raise MatchInProgress(self.match_id)
         self.match_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        self.sim = Sim(SimConfig(seed=self.settings.MATCH_SEED, duration=duration or self.settings.MATCH_SECONDS))
+        self.sim = Sim(SimConfig(seed=self.settings.MATCH_SEED, duration=duration or self.settings.MATCH_SECONDS,
+                                 min_interval=self.settings.DECISION_MIN_INTERVAL))
+        self.calls, self.cost = [0, 0], [0.0, 0.0]
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._log({"event": "start", "players": self.players.roster, "duration": self.sim.cfg.duration,
                    "mock": self.settings.is_mock})
@@ -117,6 +120,7 @@ class MatchRunner:
                 await asyncio.sleep(step / 2)
             result = sim.result()
             result["players"] = [p["id"] for p in self.players.roster]
+            result["calls"], result["cost_usd"] = self.calls, [round(c, 6) for c in self.cost]
             self._log({"event": "result", "result": result})
             logger.info("match {} over: {}", match_id, result)
         finally:
@@ -126,6 +130,16 @@ class MatchRunner:
 
     async def _decide(self, sim: Sim, match_id: str, req: DecisionRequest) -> None:
         who = self.players.roster[req.side]["id"]
+        cap = self.settings.MAX_CALLS_PER_MATCH
+        if cap and sum(self.calls) >= cap:
+            # Out of budget: send nothing more and end the match on the spot.
+            if sim.cfg.duration > sim.t:
+                sim.cfg.duration = sim.t
+                self._log({"event": "budget", "calls": self.calls, "at": sim.t}, match_id)
+                logger.warning("match {}: MAX_CALLS_PER_MATCH={} reached, ending the match", match_id, cap)
+            sim.resolve(req.side, req.id, error="call budget reached")
+            return
+        self.calls[req.side] += 1
         t0 = time.perf_counter()
         try:
             move = await self.players.decide(who, req.snapshot)
@@ -135,6 +149,7 @@ class MatchRunner:
             self._log({"event": "decision", "player": who, "request": req.id, "asked_at": req.asked_at, "ms": ms,
                        "snapshot": req.snapshot, "error": str(exc), "applied": fresh}, match_id)
             return
+        self.cost[req.side] += float((move.usage or {}).get("cost") or 0)
         fresh = sim.resolve(req.side, req.id, card=move.card, lane=move.lane, model_ms=move.ms)
         self._log({"event": "decision", "player": who, "request": req.id, "asked_at": req.asked_at,
                    "answered_at": sim.t, "ms": move.ms, "card": move.card, "lane": move.lane,

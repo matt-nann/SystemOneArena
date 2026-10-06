@@ -30,9 +30,10 @@ def sol_answer(content, finish="stop"):
 def test_both_players_get_the_same_options(settings, snap):
     body = jev_request(settings, snap)
     assert body["model"] == "typesafe/jev-1.13"
-    assert set(body["questions"]["card"]["criteria"]) == {"wait", "knight", "swarm", "archers"}  # no Giant at 4 elixir
+    assert set(body["questions"]["card"]["criteria"]) == {"wait", "warrior", "goblins", "archers"}  # no Brute at 4 elixir
     assert body["questions"]["card"]["type"] == "choice"
-    assert body["state"]["lanes"]["left"]["their_tower_hp"] == 1200
+    assert body["state"]["lanes"]["left"]["their_tower"] == "standing, 1200 HP"
+    assert body["state"]["lanes"]["right"]["your_tower"] == "destroyed" and "crowns" not in body["state"]
     schema = sol_schema(snap)
     assert set(schema["properties"]["card"]["enum"]) == set(body["questions"]["card"]["criteria"])
     assert schema["properties"]["lane"]["enum"] == ["left", "right"]
@@ -41,14 +42,14 @@ def test_both_players_get_the_same_options(settings, snap):
 @respx.mock
 @pytest.mark.asyncio
 async def test_jev_goes_to_decisions_with_the_openrouter_headers(settings, snap):
-    route = respx.post(DECISIONS).mock(return_value=httpx.Response(200, json=jev_answer("swarm", "left")))
+    route = respx.post(DECISIONS).mock(return_value=httpx.Response(200, json=jev_answer("goblins", "left")))
     client = OpenRouterClient(settings)
     move = await Players(settings, client).decide("jev", snap)
     req = route.calls.last.request
     assert req.headers["authorization"] == "Bearer or-key"
     assert req.headers["x-title"] == "System One Arena"
     assert json.loads(req.content)["questions"]["lane"]["criteria"]["left"]
-    assert (move.card, move.lane, move.confidence) == ("swarm", 0, 0.8)
+    assert (move.card, move.lane, move.confidence) == ("goblins", 0, 0.8)
     await client.aclose()
 
 
@@ -56,7 +57,7 @@ async def test_jev_goes_to_decisions_with_the_openrouter_headers(settings, snap)
 @pytest.mark.asyncio
 async def test_sol_sends_a_strict_schema_routed_to_upstreams_that_honour_it(settings, snap):
     settings.SOL_REASONING_EFFORT = "high"
-    route = respx.post(CHAT).mock(return_value=httpx.Response(200, json=sol_answer('{"card":"knight","lane":"right"}')))
+    route = respx.post(CHAT).mock(return_value=httpx.Response(200, json=sol_answer('{"card":"warrior","lane":"right"}')))
     client = OpenRouterClient(settings)
     move = await Players(settings, client).decide("sol", snap)
     body = json.loads(route.calls.last.request.content)
@@ -64,14 +65,14 @@ async def test_sol_sends_a_strict_schema_routed_to_upstreams_that_honour_it(sett
     assert body["response_format"]["json_schema"]["strict"] is True
     assert body["provider"] == {"require_parameters": True}
     assert body["reasoning"] == {"effort": "high"}
-    assert (move.card, move.lane) == ("knight", 1)
+    assert (move.card, move.lane) == ("warrior", 1)
     await client.aclose()
 
 
 @respx.mock
 @pytest.mark.asyncio
 @pytest.mark.parametrize("response, error", [
-    (httpx.Response(200, json=jev_answer("giant", "left")), InvalidMove),       # not affordable
+    (httpx.Response(200, json=jev_answer("brute", "left")), InvalidMove),       # not affordable
     (httpx.Response(200, json={"model": "x", "answers": {}}), OpenRouterError),  # unanswered
     (httpx.Response(429, json={"error": {"message": "Rate limited"}}), OpenRouterError),
 ])
@@ -102,3 +103,17 @@ def test_no_key_and_no_mock_refuses_to_build(settings):
     settings.OPENROUTER_API_KEY = None
     with pytest.raises(OpenRouterError, match="OPENROUTER_API_KEY"):
         OpenRouterClient(settings)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_sol_can_be_asked_through_decisions_for_a_jev_mirror_match(settings, snap):
+    settings.SOL_API, settings.SOL_MODEL = "decisions", "typesafe/jev-1.13"
+    route = respx.post(DECISIONS).mock(return_value=httpx.Response(200, json=jev_answer("warrior", "right")))
+    client = OpenRouterClient(settings)
+    players = Players(settings, client)
+    move = await players.decide("sol", snap)
+    assert json.loads(route.calls.last.request.content)["model"] == "typesafe/jev-1.13"
+    assert (move.card, move.lane) == ("warrior", 1)
+    assert [p["role"] for p in players.roster] == ["Fast decision model", "Fast decision model"]
+    await client.aclose()

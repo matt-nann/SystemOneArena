@@ -17,7 +17,7 @@ const INTRO=3.2,OUTRO_DELAY=1.4;
 // ?at=<seconds> starts a demo or replay that far into the match (skipping the opening card); ?pause starts it paused.
 const AT=Math.max(0,parseFloat(QS.get('at'))||0);
 const ROLES=['Fast decision model','Frontier model'];
-let NAMES=['Jev','Sol'],CONFIG=null;
+let NAMES=['Jev','Sol'],CONFIG=null,MIRROR=false;
 
 /* ---------- 9:16 frame, scaled to fit ---------- */
 const frame=$('frame'),holder=$('holder');
@@ -37,15 +37,15 @@ const ready=i=>i.complete&&i.naturalWidth>0;
 const TEAM=['blue','red'];
 // Each card's sprite sheet: rows by animation, 192px cells; ax/ay is where the feet sit in a cell.
 const UNIT={
-  knight: {sheet:'warrior',ax:101,ay:136,scale:1.45,box:[62,45,80,91],idle:[0,6],run:[1,6],atk:{right:[2,6],down:[4,6],up:[6,6]},atkDur:0.45,tall:92},
-  // The giant only hits buildings: a pawn at 2.2x that hammers the tower.
-  giant:  {sheet:'pawn',ax:96,ay:128,scale:3.0,box:[66,69,60,59],idle:[0,6],run:[1,6],atk:{right:[2,6],down:[2,6],up:[2,6]},atkDur:0.6,tall:59},
+  warrior: {sheet:'warrior',ax:101,ay:136,scale:1.45,box:[62,45,80,91],idle:[0,6],run:[1,6],atk:{right:[2,6],down:[4,6],up:[6,6]},atkDur:0.45,tall:92},
+  // The brute only hits buildings: a pawn at 2.2x that hammers the tower.
+  brute:  {sheet:'pawn',ax:96,ay:128,scale:3.0,box:[66,69,60,59],idle:[0,6],run:[1,6],atk:{right:[2,6],down:[2,6],up:[2,6]},atkDur:0.6,tall:59},
   archers:{sheet:'archer',ax:99,ay:134,scale:1.35,box:[66,59,67,75],idle:[0,6],run:[1,6],atk:{right:[4,8],down:[6,8],up:[2,8]},atkDur:0.6,tall:76},
-  swarm:  {sheet:'torch',ax:90,ay:133,scale:1.05,box:[51,44,76,89],idle:[0,7],run:[1,6],atk:{right:[2,6],down:[3,6],up:[4,6]},atkDur:0.4,tall:80},
-  bomber: {sheet:'tnt',ax:100,ay:135,scale:1.25,box:[57,67,88,68],idle:[0,6],run:[1,6],atk:{right:[2,7],down:[2,7],up:[2,7]},atkDur:0.6,tall:68},
+  goblins:  {sheet:'torch',ax:90,ay:133,scale:1.05,box:[51,44,76,89],idle:[0,7],run:[1,6],atk:{right:[2,6],down:[3,6],up:[4,6]},atkDur:0.4,tall:80},
+  dynamiter: {sheet:'tnt',ax:100,ay:135,scale:1.25,box:[57,67,88,68],idle:[0,6],run:[1,6],atk:{right:[2,7],down:[2,7],up:[2,7]},atkDur:0.6,tall:68},
 };
-const CARD_COST={knight:3,archers:3,giant:5,swarm:2,bomber:3};
-const FOOT={knight:0.5,archers:0.4,swarm:0.32,giant:0.75,bomber:0.42};
+const CARD_COST={warrior:3,archers:3,brute:5,goblins:2,dynamiter:3};
+const FOOT={warrior:0.5,archers:0.4,goblins:0.32,brute:0.75,dynamiter:0.42};
 function preload(){for(const t of TEAM)for(const n of['warrior','archer','torch','tnt','pawn','tower','castle'])img(t+'/'+n);
   for(const n of['ruins/tower','ruins/castle','fx/arrow','fx/dynamite','fx/dead','fx/explosion','fx/fire','terrain/water','terrain/foam','terrain/water_rocks','terrain/bridge','decor/tree','decor/sheep','decor/04','decor/05','decor/07','decor/08','decor/09','decor/10','decor/11'])img(n)}
 preload();
@@ -206,7 +206,7 @@ function troop(u,t,clock,alpha,ghost){
   const cw=A.cw||192;cell(im,cw,cw,col,row,A.ax,A.ay,x,y,A.scale,flip,alpha);
 }
 function troopBar(u){const A=UNIT[u.type],top=(u.y+0.45)*U-A.tall*P*A.scale-0.25*U;
-  hpBar(u.x*U,top,(u.type==='giant'?1.6:1.15)*U,0.28*U,u.hp/u.max,u.side)}
+  hpBar(u.x*U,top,(u.type==='brute'?1.6:1.15)*U,0.28*U,u.hp/u.max,u.side)}
 
 function draw(S,clock){
   ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.imageSmoothingEnabled=false;
@@ -342,7 +342,9 @@ function setPlayers(players){
   NAMES=players.map(p=>p.name);
   for(const i of[0,1]){const p=players[i];
     for(const id of['nm','inm','th'])$(id+i).textContent=p.name;
-    $('md'+i).textContent=p.model+(p.effort?' · '+p.effort:'');$('imd'+i).textContent=p.model;}
+    $('md'+i).textContent=p.model+(p.effort?' · '+p.effort:'');$('imd'+i).textContent=p.model;
+    if(p.role)$('rl'+i).textContent=$('irl'+i).textContent=p.role;}
+  MIRROR=players[0].model===players[1].model;
   document.title=NAMES[1]+' vs '+NAMES[0]+': System One Arena';
   paintLand();
 }
@@ -372,7 +374,7 @@ function showResult(r,dur,t){
   row('c',s=>({n:s.crowns,txt:String(s.crowns)}),(a,b)=>a>b);
   const slow=sd[1].avg_decision_s,secs=slow==null?null:Math.round(slow);
   const words=['zero','one','two','three','four','five','six','seven','eight','nine','ten'];
-  $('thesis').innerHTML=w===0&&secs?`When the world keeps moving, <em>a good answer now</em> beats a better answer in ${words[secs]||secs} seconds.`
+  $('thesis').innerHTML=MIRROR?`Same model on both sides. <em>${NAMES[w]}</em> took this one.`:w===0&&secs?`When the world keeps moving, <em>a good answer now</em> beats a better answer in ${words[secs]||secs} seconds.`
     :`This time ${NAMES[w]} won. <em>Speed is not the whole story.</em>`;
   $('bAgain').hidden=!(MODE==='live'&&CONFIG&&CONFIG.can_start);
   $('result').classList.add('show');

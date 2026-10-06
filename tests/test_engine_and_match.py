@@ -48,8 +48,8 @@ def test_errors_stale_answers_and_unaffordable_moves():
     reqs = sim.take_requests()
     assert [r.side for r in reqs] == [0, 1]
     assert sim.resolve(0, reqs[0].id, error="openrouter 502: boom")
-    assert not sim.resolve(0, reqs[0].id, card="knight", lane=0)  # already answered
-    assert sim.resolve(1, reqs[1].id, card="giant", lane=0)  # 5 elixir needed, has ~5.03: fine
+    assert not sim.resolve(0, reqs[0].id, card="warrior", lane=0)  # already answered
+    assert sim.resolve(1, reqs[1].id, card="brute", lane=0)  # 5 elixir needed, has ~5.03: fine
     sim.step(1 / 30)
     assert sim.sides[0].errors == 1 and sim.sides[0].last["why"] == "error"
     assert sim.sides[1].plays == 1
@@ -130,3 +130,29 @@ def test_pointing_at_anything_but_openrouter_counts_as_mock(settings):
     assert not settings.is_mock
     settings.OPENROUTER_BASE_URL = "http://localhost:8790/api/v1"
     assert settings.is_mock
+
+
+def test_min_interval_spaces_out_each_sides_calls():
+    sim, asked = Sim(SimConfig(duration=10, min_interval=1.0)), {0: [], 1: []}
+    while not sim.over:
+        sim.step(1 / 30)
+        for r in sim.take_requests():
+            asked[r.side].append(r.asked_at)
+            sim.resolve(r.side, r.id)  # answer "wait" at once
+    for times in asked.values():
+        assert times and all(b - a >= 1.0 - 1e-9 for a, b in zip(times, times[1:]))
+        assert len(times) <= 11
+
+
+@pytest.mark.asyncio
+async def test_the_call_budget_stops_requests_and_ends_the_match(settings, mock_app):
+    settings.MAX_CALLS_PER_MATCH = 6
+    client = OpenRouterClient(settings, transport=transport(mock_app))
+    runner = MatchRunner(settings, Players(settings, client))
+    runner.start(duration=30)
+    await runner.wait()
+    r = runner.sim.result()
+    assert sum(runner.calls) == 6 and r["seconds"] < 30
+    log = (settings.LOG_DIR / f"{runner.match_id}.jsonl").read_text()
+    assert '"event": "budget"' in log and '"calls": [' in log
+    await client.aclose()

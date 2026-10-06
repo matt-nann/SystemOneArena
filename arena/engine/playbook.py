@@ -8,9 +8,18 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Tuple
 
-from .sim import CARDS, OWN_HALF
+from .sim import CARDS
+
+# The "where" labels (see game.where) that mean a troop is on your half of the board.
+OWN_SIDE = {"at your tower", "past your fallen tower, near your king", "on your side", "at the bridge"}
 
 LANES = ("left", "right")
+
+
+def _tower_hp(text: str) -> int:
+    """HP from a tower as the state words it: "standing, 3800 HP" or "destroyed"."""
+    digits = "".join(ch for ch in text if ch.isdigit())
+    return int(digits) if digits else 0
 
 
 def _value(troops: Iterable[Dict[str, Any]]) -> float:
@@ -30,24 +39,24 @@ def play(state: Dict[str, Any], card_options: Iterable[str]) -> Tuple[str, str]:
     best, best_gap = None, 0.4
     for name in LANES:
         lane = lanes.get(name, {})
-        enemies = [t for t in lane.get("their_troops", []) if t["tiles_from_your_king"] <= OWN_HALF]
+        enemies = [t for t in lane.get("their_troops", []) if t.get("where") in OWN_SIDE]
         if not enemies:
             continue
-        ours = [t for t in lane.get("your_troops", []) if t["tiles_from_your_king"] <= OWN_HALF]
+        ours = [t for t in lane.get("your_troops", []) if t.get("where") in OWN_SIDE]
         gap = _value(enemies) - _value(ours)
         if gap > best_gap:
             best, best_gap = (name, enemies), gap
     if best:
         name, enemies = best
         kinds = [t["type"] for t in enemies]
-        if kinds.count("swarm") >= 3:
-            prefs = ["bomber", "archers", "knight", "swarm"]
-        elif "giant" in kinds:
-            prefs = ["swarm", "knight", "archers", "bomber"]
-        elif "archers" in kinds or "bomber" in kinds:
-            prefs = ["knight", "swarm", "archers", "bomber"]
+        if kinds.count("goblins") >= 3:
+            prefs = ["dynamiter", "archers", "warrior", "goblins"]
+        elif "brute" in kinds:
+            prefs = ["goblins", "warrior", "archers", "dynamiter"]
+        elif "archers" in kinds or "dynamiter" in kinds:
+            prefs = ["warrior", "goblins", "archers", "dynamiter"]
         else:
-            prefs = ["swarm", "archers", "knight", "bomber"]
+            prefs = ["goblins", "archers", "warrior", "dynamiter"]
         card = first(prefs)
         return (card, name) if card else ("wait", name)
 
@@ -55,19 +64,18 @@ def play(state: Dict[str, Any], card_options: Iterable[str]) -> Tuple[str, str]:
     for name in LANES:
         lane = lanes.get(name, {})
         mine = lane.get("your_troops", [])
-        has_tank = any(t["type"] in ("giant", "knight") for t in mine)
-        support = sum(t["type"] not in ("giant", "knight") for t in mine)
+        has_tank = any(t["type"] in ("brute", "warrior") for t in mine)
+        support = sum(t["type"] not in ("brute", "warrior") for t in mine)
         if has_tank and support < 3 and elixir >= 4:
-            card = first(["archers", "bomber", "swarm", "knight"])
+            card = first(["archers", "dynamiter", "goblins", "warrior"])
             if card:
                 return card, name
 
     # Start a push at the weaker enemy tower once elixir is high.
     if elixir >= 7:
-        left = lanes.get("left", {}).get("their_tower_hp", 0)
-        right = lanes.get("right", {}).get("their_tower_hp", 0)
+        left, right = (_tower_hp(lanes.get(n, {}).get("their_tower", "destroyed")) for n in LANES)
         name = "left" if left <= right else "right"
-        card = first(["giant", "knight", "archers", "bomber", "swarm"])
+        card = first(["brute", "warrior", "archers", "dynamiter", "goblins"])
         if card:
             return card, name
 

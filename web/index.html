@@ -85,15 +85,14 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .leak{display:flex;align-items:center;gap:10px;flex:none}
 .leak .ll{font-family:var(--display);font-size:21px;line-height:.95;text-align:right;color:#fff;
   text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-/* elixir leaked: a splat of spilled elixir, grey until some is lost */
-.splash{position:relative;width:84px;height:66px;display:grid;place-items:center}
-.splash svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 3px 0 rgba(18,15,36,.45))}
-.splash svg *{fill:#8a7899;stroke:var(--outline);stroke-width:3;stroke-linejoin:round;transition:fill .3s}
-.splash b{position:relative;left:-4px;top:-2px;line-height:1;font-family:var(--display);font-weight:400;font-size:24px;color:#fff;font-variant-numeric:tabular-nums;
-  text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-.leak.on .splash svg *{fill:var(--elixir)}
-.leak.on .splash svg path:first-child{fill:url(#elxBody)}
-.leak.bump .splash{animation:bump .25s ease-out}
+/* elixir leaked: a pill with the elixir drop and the amount wasted; grey until some is lost */
+.wasted{display:flex;align-items:center;gap:8px;padding:6px 16px 6px 9px;border-radius:999px;border:4px solid var(--outline);background:#3a2f55;
+  font-family:var(--display);font-size:30px;line-height:1;color:#fff;white-space:nowrap;--drop-fill:url(#elxGrey);
+  text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline);box-shadow:0 4px 0 rgba(18,15,36,.45)}
+.wasted svg{width:24px;height:30px;overflow:visible}
+.wasted b{font-weight:400;font-variant-numeric:tabular-nums}
+.leak.on .wasted{background:#c42fc2;--drop-fill:url(#elxBody)}
+.leak.bump .wasted{animation:bump .25s ease-out}
 @keyframes bump{40%{transform:scale(1.12)}}
 .tl{font-size:14px;font-weight:700;color:rgba(255,255,255,.72);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
 
@@ -176,7 +175,7 @@ body.clean .viewport{padding:0;gap:0}
 /* ?record: nothing but the frame, and no transitions, since time is stepped frame by frame */
 body.record #bAgain{display:none!important}
 body.record .frame *,body.record .frame{transition:none!important}
-@media (prefers-reduced-motion:reduce){.bar.capped .fill,.tank.capped .drips i,.leak.bump .splash{animation:none}.cap,.card{transition:none}}
+@media (prefers-reduced-motion:reduce){.bar.capped .fill,.tank.capped .drips i,.leak.bump .wasted{animation:none}.cap,.card{transition:none}}
 
 /* live-mode additions */
 .fmodel{font-family:var(--mono);font-size:24px;color:rgba(255,255,255,.8);margin-top:6px}
@@ -192,6 +191,7 @@ body.record .frame *,body.record .frame{transition:none!important}
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
 <defs>
   <linearGradient id="elxBody" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#ffb3fd"/><stop offset=".45" stop-color="#f255f0"/><stop offset="1" stop-color="#a51fb0"/></linearGradient>
+  <linearGradient id="leakGrey" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#a99bb6"/><stop offset="1" stop-color="#6c5d7c"/></linearGradient>
   <linearGradient id="elxGrey" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#b8a9c4"/><stop offset=".5" stop-color="#8a7899"/><stop offset="1" stop-color="#5d4d6d"/></linearGradient>
 </defs>
 <symbol id="crown" viewBox="0 0 24 20"><path d="M2 17V5l5 5 5-8 5 8 5-5v12z"/></symbol>
@@ -214,7 +214,7 @@ body.record .frame *,body.record .frame{transition:none!important}
           <div class="idn"><div class="name" id="nm1">Sol</div><div class="meta"><span class="role" id="rl1">Frontier model</span><span class="model" id="md1">openai/gpt-6-sol</span></div></div>
           <div class="status" id="st1"><span class="lbl">ready</span><span class="num">0.0s</span></div>
         </div>
-        <div class="elx"><div class="tank" id="tk1"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex1">5</span></div><div class="bar" id="pp1"><b class="charge"></b><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk1"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg viewBox="0 0 84 64" aria-hidden="true"><path d="M13 31C9 23 17 15 26 18C29 11 40 9 45 15C51 12 60 16 60 23C67 24 71 31 66 37C71 42 68 49 61 48C60 54 54 57 49 53C45 58 36 57 33 51C26 54 17 51 18 44C11 43 8 36 13 31Z"/><path d="M57 46C61 49 64 53 63 57C62 60 58 60 57 57C56 54 57 50 57 46Z"/><circle cx="73" cy="20" r="3.6"/><circle cx="79" cy="31" r="2.2"/><circle cx="72" cy="55" r="2.8"/><circle cx="7" cy="20" r="1.8"/></svg><b>0.0</b></span></div></div>
+        <div class="elx"><div class="tank" id="tk1"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex1">5</span></div><div class="bar" id="pp1"><b class="charge"></b><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk1"><span class="wasted"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><b>0.0</b> wasted</span></div></div>
         <div class="tape"><canvas id="tp1" aria-hidden="true"></canvas><div class="tally"><span class="count" id="dc1">0</span><span class="tl">decisions</span></div></div>
         </section>
         <div class="field" id="field"><canvas id="cv" role="img" aria-label="Arena: Sol's towers at the top, Jev's at the bottom"></canvas>
@@ -229,7 +229,7 @@ body.record .frame *,body.record .frame{transition:none!important}
         </div>
         <section class="hud jev" aria-label="Jev">
         <div class="tape"><canvas id="tp0" aria-hidden="true"></canvas><div class="tally"><span class="count" id="dc0">0</span><span class="tl">decisions</span></div></div>
-        <div class="elx"><div class="tank" id="tk0"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex0">5</span></div><div class="bar" id="pp0"><b class="charge"></b><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk0"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg viewBox="0 0 84 64" aria-hidden="true"><path d="M13 31C9 23 17 15 26 18C29 11 40 9 45 15C51 12 60 16 60 23C67 24 71 31 66 37C71 42 68 49 61 48C60 54 54 57 49 53C45 58 36 57 33 51C26 54 17 51 18 44C11 43 8 36 13 31Z"/><path d="M57 46C61 49 64 53 63 57C62 60 58 60 57 57C56 54 57 50 57 46Z"/><circle cx="73" cy="20" r="3.6"/><circle cx="79" cy="31" r="2.2"/><circle cx="72" cy="55" r="2.8"/><circle cx="7" cy="20" r="1.8"/></svg><b>0.0</b></span></div></div>
+        <div class="elx"><div class="tank" id="tk0"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex0">5</span></div><div class="bar" id="pp0"><b class="charge"></b><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk0"><span class="wasted"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><b>0.0</b> wasted</span></div></div>
         <div class="who">
           <div class="idn"><div class="name" id="nm0">Jev</div><div class="meta"><span class="role" id="rl0">Fast decision model</span><span class="model" id="md0">typesafe/jev-1.13</span></div></div>
           <div class="status" id="st0"><span class="lbl">ready</span><span class="num">0.0s</span></div>

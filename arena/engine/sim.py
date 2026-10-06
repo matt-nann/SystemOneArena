@@ -58,6 +58,9 @@ class SimConfig:
     king_hp: int = 6000
     # Least time between one side's model calls. 0 asks again as soon as an answer lands.
     min_interval: float = 0.0
+    # How fast the world runs: troop movement, attacks, tower fire and elixir. The clock and every latency
+    # stay in real seconds, so a faster world only makes a slow answer more stale.
+    pace: float = 1.0
 
 
 @dataclass
@@ -297,8 +300,9 @@ class Sim:
         if self.over:
             return
         self.t += dt
+        wdt = dt * self.cfg.pace  # world time for this step
         for s in self.sides:
-            s.elixir += self.cfg.elixir_rate * dt
+            s.elixir += self.cfg.elixir_rate * wdt
             if s.elixir > 10:
                 s.wasted += s.elixir - 10
                 s.elixir = 10.0
@@ -309,9 +313,9 @@ class Sim:
             if not s.pending:
                 self._ask(i)
 
-        self._move_and_fight(dt)
+        self._move_and_fight(wdt)
         self._separate()
-        self._towers_fire(dt)
+        self._towers_fire(wdt)
 
         for o, d in self._hurt:
             o["hp"] -= d

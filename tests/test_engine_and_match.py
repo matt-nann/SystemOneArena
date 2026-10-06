@@ -179,3 +179,12 @@ async def test_a_logged_match_reruns_to_the_same_result_without_models(settings,
     assert (got["winner"], got["seconds"]) == (logged["winner"], logged["seconds"])
     assert [s["decisions"] for s in got["sides"]] == [s["decisions"] for s in logged["sides"]]
     await client.aclose()
+
+
+def test_pace_speeds_the_world_but_not_the_clock():
+    slow, fast = Sim(SimConfig(duration=5)), Sim(SimConfig(duration=5, pace=1.25))
+    for s in (slow, fast):
+        for _ in range(30):
+            s.step(1 / 30)
+    assert fast.t == slow.t  # the clock is real time either way
+    assert fast.sides[0].elixir - 5 > (slow.sides[0].elixir - 5) * 1.2  # elixir comes in 25% faster

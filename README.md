@@ -62,7 +62,7 @@ That is at most 60 calls a match (about 50 in practice). Each match's result in 
 
 ## Recorded matches and video
 
-`matches/` holds three real Jev vs Luna matches (Jev won 3–0) with every request and raw answer. Anyone can watch, re-simulate and record them without a key or a model call. See [`matches/README.md`](matches/README.md).
+`matches/` holds real matches with every request and raw answer: Jev vs Sol (`openai/gpt-6-sol`, the match in the video; Jev took the king tower at 28.7s for 21× less spend) and three Jev vs Luna (`openai/gpt-6-luna`; Jev won 3–0). Anyone can watch, re-simulate and record them without a key or a model call. See [`matches/README.md`](matches/README.md).
 
 - `tools/archive.py <id>` copies a match from `logs/` into `matches/`.
 - `tools/rerun.py <id>` replays a match's decisions through the engine and checks it ends the same way.

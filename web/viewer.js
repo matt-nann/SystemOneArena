@@ -264,15 +264,6 @@ function draw(S,clock){
   rr(7.1*U,(RIVER-0.85)*U,3.8*U,1.7*U,0.85*U);fs('#1b1830',OL,0.12*U);
   label(Math.floor(left/60)+':'+String(left%60).padStart(2,'0'),9*U,(RIVER+0.06)*U,1.1*U,'#fff',0.2*U);
 
-  // Ghosts: the board a side is still answering, for troops that have since moved or died.
-  for(const i of[1,0]){const sd=S.sides[i];if(!sd||!sd.ghosts||S.over||S.t-sd.thinking_since<1)continue;
-    const a=Math.min(1,(S.t-sd.thinking_since-1)/0.6),now={};for(const u of S.units)now[u.id]=u;
-    ctx.save();ctx.setLineDash([0.18*U,0.22*U]);ctx.lineWidth=0.08*U;ctx.strokeStyle=`rgba(255,240,170,${0.6*a})`;
-    for(const g of sd.ghosts){const u=now[g.id];if(u&&Math.hypot(u.x-g.x,u.y-g.y)>=1.2){ctx.beginPath();ctx.moveTo(g.x*U,(g.y+0.2)*U);ctx.lineTo(u.x*U,(u.y+0.2)*U);ctx.stroke()}}
-    ctx.restore();
-    for(const g of sd.ghosts){const u=now[g.id];if(u&&Math.hypot(u.x-g.x,u.y-g.y)<1.2)continue;
-      ctx.save();if('filter' in ctx)ctx.filter='grayscale(1) brightness(1.5)';troop({...g,act:'idle'},S.t,clock,0.4*a,true);ctx.restore()}}
-
   drawEdgeDecor(clock);
   const things=[];for(const t of S.towers)things.push({y:t.y+(t.kind==='K'?1.4:1.0),t});for(const u of S.units)things.push({y:u.y+0.45,u});
   things.sort((a,b)=>a.y-b.y);
@@ -351,7 +342,7 @@ function hud(S){
     set('e'+i,Math.floor(s.elixir+1e-6),v=>$('ex'+i).textContent=v);
     set('cap'+i,s.elixir>=9.99&&!S.over,v=>{$('pp'+i).classList.toggle('capped',v);$('tk'+i).classList.toggle('capped',v)});
     set('d'+i,s.decisions,v=>$('dc'+i).textContent=v);
-    set('lk'+i,s.wasted.toFixed(1),v=>{const L=$('lk'+i);L.querySelector('b').textContent=v;L.classList.toggle('on',s.wasted>=0.1)});
+    set('lk'+i,s.wasted.toFixed(1),v=>{const L=$('lk'+i);L.querySelector('b').textContent=s.wasted>=0.1?'−'+v:v;L.classList.toggle('on',s.wasted>=0.1)});
     set('lkb'+i,Math.floor(s.wasted),v=>{const L=$('lk'+i);if(!v)return;L.classList.remove('bump');void L.offsetWidth;L.classList.add('bump')});
     const thinking=s.thinking_since!=null&&!S.over&&S.t-s.thinking_since>0.5;
     let lbl,num,cls='status';
@@ -380,16 +371,13 @@ function captions(S,now){
     :`Same game, same rules. Every move is a live model call.`);
   if(!LAT&&jev.avg!=null&&sol.decisions>=1)say('speed',`${N(0)} decides in <span class="n">${jev.avg.toFixed(2)}s</span>. ${N(1)} took <span class="n">${sol.last.lat.toFixed(1)}s</span>.`);
   if(sol.thinking_since!=null&&S.t-sol.thinking_since>2.5)say('wait',`${N(1)} is still thinking. The match clock keeps running.`);
-  // Only when faded troops are actually on screen: a troop that has moved on or died since the slow side was asked.
-  if(sol.ghosts&&S.t-sol.thinking_since>3){const now={};for(const u of S.units)now[u.id]=u;
-    if(sol.ghosts.some(g=>!now[g.id]||Math.hypot(now[g.id].x-g.x,now[g.id].y-g.y)>=1.2))
-      say('ghost',`${N(1)} is still answering an old board. The faded troops show where it was.`)}
   if(jev.decisions>=40)say('count',`${N(0)} has made <span class="n">${jev.decisions}</span> decisions. ${N(1)} has made <span class="n">${sol.decisions}</span>.`);
   const falls=S.towers.filter(t=>!t.alive);
   for(const t of falls){const key='t'+t.side+t.kind;if(capFlags[key])continue;
     const by=1-t.side,clock=Math.max(0,Math.ceil(S.dur-S.t));
     if(t.kind==='K'){say(key,`${N(by)} takes the king tower. Game over.`);capQueue=[capQueue.pop()];capShownAt=-99}
-    else say(key,`Tower down at <span class="n">0:${String(clock).padStart(2,'0')}</span>. ${by===0?`${N(1)} was answering a board from seconds ago.`:`${N(1)} breaks through.`}`)}
+    else{const c=[0,1].map(i=>S.towers.filter(t=>t.side!==i&&!t.alive).length);const lead=c[0]===c[1]?-1:c[0]>c[1]?0:1;
+      say(key,`Tower down at <span class="n">0:${String(clock).padStart(2,'0')}</span>. `+(lead<0?`It's ${c[0]}–${c[1]}.`:`${N(lead)} leads ${Math.max(...c)}–${Math.min(...c)}.`))}}
   if(capQueue.length&&now-capShownAt>3.4)showCap(capQueue.shift(),now);
 }
 function resetCaptions(){capQueue=[];capFlags={};capShownAt=-99;capEl.innerHTML='&nbsp;'}

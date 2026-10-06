@@ -102,8 +102,8 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <canvas id="cv" role="img" aria-label="Two-lane arena battle between Jev and Sol"></canvas>
     <div class="overlay show" id="start">
       <div class="vs"><span class="a" id="vsA">Sol</span><span class="mid">versus</span><span class="b" id="vsB">Jev</span></div>
-      <div class="lat" id="lat">5.99s per decision against 0.36s</div>
-      <button class="go" id="btnStart">Start match</button>
+      <div class="lat" id="lat">Connecting to the arena…</div>
+      <button class="go" id="btnStart" hidden>Start match</button>
     </div>
     <div class="overlay" id="result" aria-live="polite">
       <div class="verdict" id="verdict">Jev wins</div>
@@ -115,8 +115,8 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
         <tr><td>Avg decision time</td><td id="r_t0"></td><td id="r_t1"></td></tr>
         <tr id="r_err"><td>Failed calls</td><td id="r_e0"></td><td id="r_e1"></td></tr>
       </table>
-      <div class="note" id="note">Both sides ran the same playbook. Only the time per decision differed.</div>
-      <button class="go" id="btnAgain">Play again</button>
+      <div class="note" id="note">Both sides got the same board and options. Each move came from its model.</div>
+      <button class="go" id="btnAgain" hidden>Start next match</button>
     </div>
   </div>
 
@@ -127,218 +127,25 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
   </section>
 
   <footer class="bar">
-    <p id="foot">Scripted preview. Same playbook on both sides, assumed decision times. Run the local server for a live match.</p>
-    <div><button class="chip" id="btnSpeed" aria-label="Playback speed">1×</button><button class="chip" id="btnRestart">Restart</button></div>
+    <p id="foot">Every move is a live model call. The clock keeps running while a model thinks.</p>
+    <div><button class="chip" id="btnReplay" hidden>Replay again</button></div>
   </footer>
 </main>
 <script>
-/* ===== SIM (pure, deterministic) ===== */
-const W=18,H=28,RIVER=14,LANES=[4,14];
-const CARDS={
-  knight:{name:'Knight',cost:3,count:1,hp:900,dmg:120,cd:1.0,range:0.6,speed:2.0,r:0.55},
-  archers:{name:'Archers',cost:3,count:2,hp:220,dmg:70,cd:0.9,range:4.5,speed:2.0,r:0.38},
-  swarm:{name:'Swarm',cost:2,count:4,hp:70,dmg:45,cd:0.8,range:0.5,speed:2.8,r:0.26},
-  giant:{name:'Giant',cost:5,count:1,hp:2200,dmg:170,cd:1.4,range:0.6,speed:1.4,r:0.8,bo:true},
-  bomber:{name:'Bomber',cost:3,count:1,hp:200,dmg:130,cd:1.5,range:4.0,speed:2.0,r:0.4,splash:1.6}
-};
-const DECK=['knight','archers','giant','swarm','bomber'];
-function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-
-function createSim(cfg){
-  const R=rng(cfg.seed||7);
-  const S={t:0,dur:cfg.duration,over:false,winner:null,reason:'',units:[],shots:[],fx:[],log:[],nid:1,
-    sides:[0,1].map(i=>({elixir:5,wasted:0,decisions:0,plays:0,late:0,crowns:0,errors:0,invalid:0,hand:DECK.slice(0,4),queue:DECK.slice(4),
-      pending:null,last:null,lat:cfg.latency[i],jit:cfg.jitter[i],lats:[],modelMs:[],lastError:null})),
-    towers:[]};
-  const mk=(side,kind,x,y)=>{const k=kind==='K';S.towers.push({side,kind,x,y,hp:k?cfg.kingHp:cfg.towerHp,max:k?cfg.kingHp:cfg.towerHp,alive:true,cd:0,r:k?1.4:1.1,range:k?6:6.5,dmg:k?70:60,rate:k?0.9:0.8,hit:0})};
-  mk(0,'L',LANES[0],22.5);mk(0,'R',LANES[1],22.5);mk(0,'K',9,25.6);
-  mk(1,'L',LANES[0],5.5);mk(1,'R',LANES[1],5.5);mk(1,'K',9,2.4);
-  const tower=(side,kind)=>S.towers.find(t=>t.side===side&&t.kind===kind);
-  const princess=(side,lane)=>tower(side,lane===0?'L':'R');
-  const fwd=side=>side===0?-1:1;
-  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-
-  function policy(side){
-    const me=S.sides[side],foe=1-side;
-    const can=c=>me.hand.includes(c)&&CARDS[c].cost<=me.elixir;
-    const mine=u=>side===0?u.y>RIVER-2.5:u.y<RIVER+2.5;
-    let best=null;
-    for(let lane=0;lane<2;lane++){
-      const E=S.units.filter(u=>u.side===foe&&u.lane===lane&&mine(u));
-      if(!E.length)continue;
-      const D=S.units.filter(u=>u.side===side&&u.lane===lane&&mine(u));
-      const ev=E.reduce((s,u)=>s+u.val,0),dv=D.reduce((s,u)=>s+u.val,0);
-      if(ev>dv+0.4){const u=ev-dv;if(!best||u>best.u)best={lane,E,u}}
-    }
-    if(best){
-      const n=t=>best.E.filter(u=>u.type===t).length;
-      let prefs;
-      if(n('swarm')>=3)prefs=['bomber','archers','knight','swarm'];
-      else if(n('giant'))prefs=['swarm','knight','archers','bomber'];
-      else if(n('archers')||n('bomber'))prefs=['knight','swarm','archers','bomber'];
-      else prefs=['swarm','archers','knight','bomber'];
-      for(const c of prefs)if(can(c))return{card:c,lane:best.lane,spot:'defend',why:'defend',ids:best.E.map(u=>u.id)};
-      return{card:null,why:'save'};
-    }
-    for(let lane=0;lane<2;lane++){
-      const lead=S.units.some(u=>u.side===side&&u.lane===lane&&(u.type==='giant'||u.type==='knight'));
-      const sup=S.units.filter(u=>u.side===side&&u.lane===lane&&u.type!=='giant'&&u.type!=='knight').length;
-      if(lead&&sup<3&&me.elixir>=4)for(const c of['archers','bomber','swarm','knight'])if(can(c))return{card:c,lane,spot:'support',why:'push'};
-    }
-    if(me.elixir>=7){
-      const pl=[princess(foe,0),princess(foe,1)];
-      let lane;
-      if(!pl[0].alive&&pl[1].alive)lane=0;else if(!pl[1].alive&&pl[0].alive)lane=1;
-      else if(pl[0].hp!==pl[1].hp)lane=pl[0].hp<pl[1].hp?0:1;else lane=me.plays%2;
-      for(const c of['giant','knight','archers','bomber','swarm'])if(can(c))return{card:c,lane,spot:'bridge',why:'push'};
-    }
-    return{card:null,why:'wait'};
-  }
-
-  // Where a card would go in each lane, fixed when a remote decision starts so a
-  // slow answer lands on the board it was asked about.
-  function laneCtx(side,lane){
-    const foe=1-side,mine=u=>side===0?u.y>RIVER-2.5:u.y<RIVER+2.5;
-    const E=S.units.filter(u=>u.side===foe&&u.lane===lane&&mine(u));
-    if(E.length)return{spot:'defend',ids:E.map(u=>u.id)};
-    if(S.units.some(u=>u.side===side&&u.lane===lane&&(u.type==='giant'||u.type==='knight')))return{spot:'support'};
-    return{spot:'bridge'};
-  }
-  // The board from one side's point of view (lanes and distances mirrored for the top side).
-  function snapshot(side){
-    const foe=1-side,me=S.sides[side],k=tower(side,'K');
-    const tr=u=>({type:u.type,hp:Math.ceil(u.hp),tiles_from_your_king:+Math.abs(u.y-k.y).toFixed(1)});
-    return{
-      timeLeft:Math.max(0,Math.ceil(S.dur-S.t)),elixir:Math.floor(me.elixir+1e-6),hand:me.hand.slice(),
-      crowns:{you:me.crowns,opponent:S.sides[foe].crowns},
-      kings:{your_hp:Math.ceil(k.hp),their_hp:Math.ceil(tower(foe,'K').hp)},
-      lanes:[0,1].map(lane=>{const mine=laneCtx(side,lane);return{
-        your_tower_hp:Math.ceil(princess(side,lane).hp),their_tower_hp:Math.ceil(princess(foe,lane).hp),
-        your_troops:S.units.filter(u=>u.side===side&&u.lane===lane).map(tr),
-        their_troops:S.units.filter(u=>u.side===foe&&u.lane===lane).map(tr),
-        enemy_troops_on_your_side:mine.spot==='defend'?mine.ids.length:0}})
-    };
-  }
-  function askRemote(i){
-    const s=S.sides[i];
-    // Nothing affordable means nothing to decide: check again shortly, no call made.
-    if(!s.hand.some(c=>CARDS[c].cost<=s.elixir)){s.pending={start:S.t,due:S.t+0.25,auto:true,action:{card:null,why:'wait'}};return}
-    const p={start:S.t,due:Infinity,remote:true,ctx:[laneCtx(i,0),laneCtx(i,1)]};s.pending=p;
-    cfg.decide(i,snapshot(i)).then(r=>{
-      if(s.pending!==p||S.over)return;
-      if(r.card){const c=p.ctx[r.lane];p.action={card:r.card,lane:r.lane,spot:c.spot,why:c.spot==='defend'?'defend':'push',ids:c.ids}}
-      else p.action={card:null,why:'wait'};
-      p.modelMs=r.ms;p.ready=true;
-    },err=>{
-      if(s.pending!==p||S.over)return;
-      s.errors++;s.lastError=String(err&&err.message||err);p.action={card:null,why:'error'};p.ready=true;
-    });
-  }
-
-  function spotPos(side,lane,spot){
-    const f=fwd(side),lx=LANES[lane],p=princess(side,lane),k=tower(side,'K');
-    if(spot==='defend'){
-      if(p.alive)return{x:lx,y:p.y+f*2.6};
-      return{x:9+(lx-9)*0.45,y:k.y+f*3.2};
-    }
-    if(spot==='support'){
-      const L=S.units.filter(u=>u.side===side&&u.lane===lane&&(u.type==='giant'||u.type==='knight'));
-      if(L.length){let lead=L[0];for(const u of L)if(f*(u.y-lead.y)>0)lead=u;
-        let y=lead.y-f*2.2;y=side===0?Math.max(y,RIVER+1.2):Math.min(y,RIVER-1.2);return{x:lx,y}}
-    }
-    return{x:lx,y:RIVER-f*1.8};
-  }
-  function deploy(side,a){
-    const me=S.sides[side],c=CARDS[a.card];
-    me.elixir-=c.cost;me.plays++;
-    const i=me.hand.indexOf(a.card);me.queue.push(a.card);me.hand[i]=me.queue.shift();
-    const p=spotPos(side,a.lane,a.spot);
-    for(let n=0;n<c.count;n++){
-      const ox=c.count>1?((n%2)-0.5)*1.0+(R()-0.5)*0.2:(R()-0.5)*0.3, oy=c.count>2?(Math.floor(n/2)-0.5)*0.9:0;
-      S.units.push({id:S.nid++,side,type:a.card,lane:a.lane,x:p.x+ox,y:p.y+oy,hp:c.hp,max:c.hp,cd:0.4,val:c.cost/c.count,hit:0,born:S.t});
-    }
-    S.fx.push({kind:'deploy',side,type:a.card,x:p.x,y:p.y,t:S.t,label:c.name});
-  }
-  let DQ=[];function hurt(o,d){DQ.push([o,d])}
-  function flush(){for(const[o,d]of DQ){o.hp-=d;o.hit=S.t}DQ=[]}
-
-  function step(dt){
-    if(S.over)return;
-    S.t+=dt;
-    for(const s of S.sides){s.elixir+=cfg.elixirRate*dt;if(s.elixir>10){s.wasted+=s.elixir-10;s.elixir=10}}
-    for(let i=0;i<2;i++){
-      const s=S.sides[i];
-      if(s.pending&&(s.pending.ready||S.t>=s.pending.due)){
-        const P=s.pending,a=P.action,lat=S.t-P.start;
-        s.pending=null;
-        if(P.auto)continue;
-        // A model may only pick from cards it could afford when asked, and elixir only rises while it thinks.
-        if(a.card&&!(s.hand.includes(a.card)&&CARDS[a.card].cost<=s.elixir)){s.invalid++;a.card=null}
-        let late=false;
-        if(a.card&&a.why==='defend'){late=!a.ids.some(id=>S.units.some(u=>u.id===id));if(late)s.late++}
-        if(a.card)deploy(i,a);
-        s.decisions++;s.lats.push(lat);if(P.modelMs!=null)s.modelMs.push(P.modelMs);
-        s.last={card:a.card,lane:a.lane,why:a.why,lat,at:S.t,late};
-      }
-      if(!s.pending){
-        if(cfg.remote&&cfg.remote[i])askRemote(i);
-        else{const lat=Math.max(0.05,s.lat+(R()*2-1)*s.jit);s.pending={start:S.t,due:S.t+lat,action:policy(i)}}
-      }
-    }
-    for(const u of S.units){
-      if(u.hp<=0)continue;
-      const c=CARDS[u.type],foe=1-u.side;let tg=null,bd=1e9;
-      if(!c.bo)for(const e of S.units){if(e.side!==foe||e.hp<=0)continue;const d=dist(u,e);if(d<5.5&&d<bd){bd=d;tg=e}}
-      let isT=false;
-      if(!tg){const p=princess(foe,u.lane);tg=p.alive?p:tower(foe,'K');isT=true;bd=dist(u,tg)}
-      const tr=isT?tg.r:CARDS[tg.type].r;
-      u.cd-=dt;
-      if(bd-tr-c.r<=c.range){
-        if(u.cd<=0){u.cd=c.cd;
-          if(c.splash){for(const e of S.units)if(e.side===foe&&e.hp>0&&Math.hypot(e.x-tg.x,e.y-tg.y)<=c.splash)hurt(e,c.dmg);if(isT)hurt(tg,c.dmg);S.fx.push({kind:'boom',side:u.side,x:tg.x,y:tg.y,t:S.t,r:c.splash})}
-          else hurt(tg,c.dmg);
-          if(c.range>1)S.shots.push({side:u.side,k:c.splash?'bomb':'arrow',x1:u.x,y1:u.y,x2:tg.x,y2:tg.y,t:S.t});
-          u.atk=S.t;
-        }
-      }else{
-        let tx=tg.x,ty=tg.y;
-        const cross=(u.y-RIVER)*(ty-RIVER)<0||Math.abs(u.y-RIVER)<1.4;
-        if(cross){const lx=LANES[u.lane];if(Math.abs(u.x-lx)>0.9){tx=lx;ty=u.y}else tx=u.x+(lx-u.x)*0.5}
-        const d=Math.hypot(tx-u.x,ty-u.y)||1;u.x+=(tx-u.x)/d*c.speed*dt;u.y+=(ty-u.y)/d*c.speed*dt;
-      }
-    }
-    for(let i=0;i<S.units.length;i++)for(let j=i+1;j<S.units.length;j++){
-      const a=S.units[i],b=S.units[j];if(a.side!==b.side)continue;
-      const m=(CARDS[a.type].r+CARDS[b.type].r)*0.9,dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy);
-      if(d<m&&d>0.001){const p=(m-d)/2;a.x-=dx/d*p;a.y-=dy/d*p;b.x+=dx/d*p;b.y+=dy/d*p}
-    }
-    for(const t of S.towers){
-      if(!t.alive)continue;t.cd-=dt;if(t.cd>0)continue;
-      let tg=null,bd=t.range;for(const e of S.units){if(e.side===t.side||e.hp<=0)continue;const d=dist(t,e);if(d<bd){bd=d;tg=e}}
-      if(tg){t.cd=t.rate;hurt(tg,t.dmg);t.aim=Math.atan2(tg.y-t.y,tg.x-t.x);S.shots.push({side:t.side,k:'ball',x1:t.x,y1:t.y,x2:tg.x,y2:tg.y,t:S.t})}
-    }
-    flush();
-    for(const u of S.units)if(u.hp<=0)S.fx.push({kind:'pop',side:u.side,x:u.x,y:u.y,t:S.t});
-    S.units=S.units.filter(u=>u.hp>0);
-    for(const t of S.towers)if(t.alive&&t.hp<=0){t.alive=false;t.hp=0;S.sides[1-t.side].crowns+=t.kind==='K'?3-S.sides[1-t.side].crowns:1;
-      S.fx.push({kind:'fall',side:t.side,x:t.x,y:t.y,t:S.t});S.log.push({t:S.t,side:t.side,kind:t.kind});
-      if(t.kind==='K'){S.over=true;S.winner=1-t.side;S.reason='king'}}
-    S.shots=S.shots.filter(s=>S.t-s.t<0.25);S.fx=S.fx.filter(f=>S.t-f.t<1.4);
-    if(!S.over&&S.t>=S.dur){S.over=true;S.reason='time';
-      const a=S.sides[0].crowns,b=S.sides[1].crowns;
-      if(a!==b)S.winner=a>b?0:1;else{const hp=s=>S.towers.filter(t=>t.side===s).reduce((x,t)=>x+t.hp,0);S.winner=hp(0)>=hp(1)?0:1}}
-  }
-  return{S,step};
-}
-/* ===== END SIM ===== */
 /* ===== UI ===== */
-const CFG={seed:13,duration:60,latency:[0.36,5.99],jitter:[0.05,0.7],elixirRate:1,towerHp:3800,kingHp:6000};
-let NAMES=['Jev','Sol'], MARK=['JEV','SOL'], LIVE=null, MATCH='';
+/* Read-only viewer. The arena service runs the game; this page only draws the
+   frames it streams (or a recorded match with ?replay=<id>). Nothing here can
+   change a match except the Start button, which needs the admin token when one is set. */
+// Board layout in tiles (matches arena/engine/sim.py).
+const W=18,H=28,RIVER=14,LANES=[4,14];
+let NAMES=['Jev','Sol'], MARK=['JEV','SOL'], CONFIG=null;
 const $=id=>document.getElementById(id);
+const QS=new URLSearchParams(location.search),ADMIN=QS.get('admin'),REPLAY=QS.get('replay');
+const AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
 const cv=$('cv'),field=$('field'),bg=document.createElement('canvas');
 let ctx=cv.getContext('2d');
-let sim=createSim(CFG),mode='idle',speed=1,acc=0,prev=0,endAt=0,U=10,clock=0;
-const STEP=1/30,TAU=Math.PI*2,OL='#1d1a2b';
+let view=null,prev=0,U=10,clock=0;
+const TAU=Math.PI*2,OL='#1d1a2b';
 const TEAM=[{m:'#3d8bff',d:'#1f5bcc',l:'#a9d0ff'},{m:'#f24a40',d:'#b3261f',l:'#ffb0a8'}];
 const SKIN='#f4c9a0',STEEL='#cfd6e2',WOOD='#a9743f',GOLD='#ffcb45';
 const DISPLAY='"Lilita One","Arial Rounded MT Bold","Arial Black",sans-serif';
@@ -453,8 +260,8 @@ new ResizeObserver(fit).observe(field);fit();
 if(document.fonts){document.fonts.load('20px "Lilita One"').then(paintGround,()=>{});document.fonts.ready.then(paintGround)}
 
 function draw(){
-  const S=sim.S,w=cv.width;
   ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.drawImage(bg,0,0);
+  const S=view||{t:0,dur:60,towers:[],units:[],shots:[],fx:[],sides:[]};
   // water glints
   ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=0.09*U;ctx.lineCap='round';
   for(let i=0;i<7;i++){const x=((i*2.9+clock*0.7)%(W+2)-1)*U,y=(RIVER-0.45+(i%3)*0.42)*U;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+0.7*U,y);ctx.stroke()}
@@ -483,7 +290,7 @@ function draw(){
       ctx.setTransform(1,0,0,1,0,0);
       const bw=(k?3.3:2.9)*U,bh=0.5*U,by=t.side===1?(k?0.12*U:(t.y-1.42*f-0.72)*U):(k?(H-0.12)*U-bh:(t.y+1.45*f+0.2)*U);
       hpBar(t.x*U,by,bw,bh,t.hp/t.max,t.side,Math.ceil(t.hp));
-    }else{const u=o.u,c=CARDS[u.type],k=U*SCALE[u.type];
+    }else{const u=o.u,k=U*SCALE[u.type];
       const age=u.atk==null?9:S.t-u.atk,sw=age<0.3?1-age/0.3:0;
       const bob=age>0.4?Math.sin(clock*11+u.id)*0.07:0,lunge=sw*0.18*(u.side===0?-1:1);
       const hit=S.t-u.hit<0.08;
@@ -491,7 +298,7 @@ function draw(){
       E(0,1.02,0.82,0.3);fs('rgba(0,0,0,.28)',0);E(0,1.02,0.82,0.3);ctx.strokeStyle=TEAM[u.side].l;ctx.lineWidth=0.1;ctx.stroke();
       ctx.translate(0,bob);if(hit)ctx.globalAlpha=0.55;
       sprite(u.type,u.side,sw);ctx.globalAlpha=1;
-      if(u.hp<u.max||c.hp>=900){ctx.setTransform(1,0,0,1,0,0);const top=u.y*U-0.35*k-(u.type==='giant'?1.9:1.65)*k;hpBar(u.x*U,top,Math.max(1.3*U,1.5*k),0.3*U,u.hp/u.max,u.side)}
+      if(u.hp<u.max||u.max>=900){ctx.setTransform(1,0,0,1,0,0);const top=u.y*U-0.35*k-(u.type==='giant'?1.9:1.65)*k;hpBar(u.x*U,top,Math.max(1.3*U,1.5*k),0.3*U,u.hp/u.max,u.side)}
     }
   }
   ctx.setTransform(1,0,0,1,0,0);
@@ -518,8 +325,8 @@ function draw(){
       const k=a/1.4;ctx.globalAlpha=Math.max(0,1-k*k);ctx.setTransform(U,0,0,U,x,y-(1+k*2.5)*U);crown(0,0,1.1);fs(GOLD,OL,0.14);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1}
   }
   // speech bubble while a side is still thinking
-  if(mode==='run')for(const i of[0,1]){const s=S.sides[i],kt=S.towers.find(t=>t.side===i&&t.kind==='K');if(!kt.alive||!s.pending)continue;
-    const el=S.t-s.pending.start;if(el<0.6)continue;
+  if(!S.over)for(const i of[0,1]){const s=S.sides[i],kt=S.towers.find(t=>t.side===i&&t.kind==='K');if(!s||!kt.alive||s.thinking_since==null)continue;
+    const el=S.t-s.thinking_since;if(el<0.6)continue;
     const bx=14.3,by=i===1?1.7:H-1.7;ctx.setTransform(U,0,0,U,0,0);
     ctx.beginPath();ctx.moveTo(11.6,by-0.35);ctx.lineTo(10.6,by+(i===1?0.5:-0.5));ctx.lineTo(11.6,by+0.35);ctx.closePath();fs('#fff',OL,0.12);
     rr(bx-3.1,by-0.95,6.2,1.9,0.6);fs('#fff',OL,0.12);
@@ -531,81 +338,106 @@ function draw(){
 const cache={};
 function put(id,v,cls){if(cache[id]!==v){cache[id]=v;$(id).textContent=v}if(cache[id+'|c']!==cls){cache[id+'|c']=cls;$(id).className=cls}}
 function hud(){
-  const S=sim.S;
+  const S=view;if(!S)return;
   for(const i of[0,1]){const s=S.sides[i];
     const pips=$('pp'+i).children;for(let n=0;n<10;n++){const f=Math.max(0,Math.min(1,s.elixir-n)),k='p'+i+n,v=f.toFixed(2);if(cache[k]!==v){cache[k]=v;pips[n].firstChild.style.transform='scaleX('+v+')'}}
     const ex=Math.floor(s.elixir+1e-6);if(cache['e'+i]!==ex){cache['e'+i]=ex;$('ex'+i).textContent=ex}
-    const capped=s.elixir>=9.99&&mode==='run';if(cache['cap'+i]!==capped){cache['cap'+i]=capped;$('pp'+i).classList.toggle('capped',capped)}
+    const capped=s.elixir>=9.99&&!S.over;if(cache['cap'+i]!==capped){cache['cap'+i]=capped;$('pp'+i).classList.toggle('capped',capped)}
     const w=s.wasted.toFixed(1);if(cache['w'+i]!==w){cache['w'+i]=w;$('ws'+i).innerHTML='wasted <strong>'+w+'</strong>';$('ws'+i).classList.toggle('bad',s.wasted>=1)}
     if(cache['d'+i]!==s.decisions){cache['d'+i]=s.decisions;$('dc'+i).innerHTML='decisions <strong>'+s.decisions+'</strong>'}
     if(cache['c'+i]!==s.crowns){cache['c'+i]=s.crowns;const cr=$('cr'+i).children;for(let n=0;n<3;n++)cr[n].classList.toggle('on',n<s.crowns)}
-    if(mode==='idle'){put('st'+i,'ready','state');continue}
-    const el=s.pending?S.t-s.pending.start:0;
-    if(mode==='run'&&s.pending&&el>0.5)put('st'+i,'thinking… '+el.toFixed(1)+'s','state thinking');
+    const el=s.thinking_since==null?0:S.t-s.thinking_since;
+    if(!S.over&&s.thinking_since!=null&&el>0.5)put('st'+i,'thinking… '+el.toFixed(1)+'s','state thinking');
     else if(s.last&&s.last.why==='error')put('st'+i,'⚠ call failed','state thinking');
     else if(s.last)put('st'+i,'✓ decided in '+s.last.lat.toFixed(2)+'s','state');
-    else put('st'+i,'thinking… '+el.toFixed(1)+'s','state thinking');
+    else if(s.thinking_since!=null)put('st'+i,'thinking… '+el.toFixed(1)+'s','state thinking');
+    else put('st'+i,'ready','state');
   }
 }
-function finish(){
-  const S=sim.S,a=S.sides[0],b=S.sides[1];
-  $('verdict').textContent=NAMES[S.winner]+' wins';$('verdict').classList.toggle('lost',S.winner!==0);
-  $('r_d0').textContent=a.decisions;$('r_d1').textContent=b.decisions;
-  $('r_w0').textContent=a.wasted.toFixed(1);$('r_w1').textContent=b.wasted.toFixed(1);
-  $('r_c0').textContent=a.crowns;$('r_c1').textContent=b.crowns;
-  const avg=s=>s.lats.length?(s.lats.reduce((x,y)=>x+y,0)/s.lats.length).toFixed(2)+'s':'–';
-  $('r_t0').textContent=avg(a);$('r_t1').textContent=avg(b);
-  $('r_e0').textContent=a.errors;$('r_e1').textContent=b.errors;$('r_err').hidden=!LIVE;
-  if(LIVE){const side=s=>({decisions:s.decisions,plays:s.plays,elixirWasted:+s.wasted.toFixed(1),crowns:s.crowns,lateDefences:s.late,
-      failedCalls:s.errors,invalidMoves:s.invalid,avgDecisionSeconds:s.lats.length?s.lats.reduce((x,y)=>x+y,0)/s.lats.length:null,
-      avgModelMs:s.modelMs.length?s.modelMs.reduce((x,y)=>x+y,0)/s.modelMs.length:null});
-    fetch('/api/result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({match:MATCH,result:{
-      winner:LIVE.players[S.winner].id,reason:S.reason,seconds:+S.t.toFixed(1),[LIVE.players[0].id]:side(a),[LIVE.players[1].id]:side(b)}})}).catch(()=>{})}
-  $('result').classList.add('show');$('btnAgain').focus({preventScroll:true});
+function showResult(r){
+  $('verdict').textContent=NAMES[r.winner]+' wins';$('verdict').classList.toggle('lost',r.winner!==0);
+  const fmt=(k,f)=>[0,1].forEach(i=>$('r_'+k+i).textContent=f(r.sides[i]));
+  fmt('d',s=>s.decisions);fmt('w',s=>s.elixir_wasted.toFixed(1));fmt('c',s=>s.crowns);
+  fmt('t',s=>s.avg_decision_s==null?'–':s.avg_decision_s.toFixed(2)+'s');fmt('e',s=>s.failed_calls);
+  $('btnAgain').hidden=!(CONFIG&&CONFIG.can_start)||!!REPLAY;
+  $('start').classList.remove('show');$('result').classList.add('show');
 }
-function matchCfg(){
-  if(!LIVE)return CFG;
-  MATCH=new Date().toISOString().replace(/[:.]/g,'-');
-  return{...CFG,remote:[true,true],decide:(i,snapshot)=>fetch('/api/decide/'+LIVE.players[i].id,{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({match:MATCH,snapshot})})
-    .then(r=>r.json().then(j=>{if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}))};
+
+/* Frames arrive at FRAME_HZ; draw between the last two so motion stays smooth. */
+let fa=null,fb=null,fbAt=0,gap=50,overAt=0,shownFor=null,matchId=null;
+function lerpFrame(a,b,k){
+  if(!a||k>=1)return b;
+  const pos={};for(const u of a.units)pos[u.id]=u;
+  return{...b,t:a.t+(b.t-a.t)*k,
+    units:b.units.map(u=>{const p=pos[u.id];return p?{...u,x:p.x+(u.x-p.x)*k,y:p.y+(u.y-p.y)*k}:u})};
 }
-function reset(run){sim=createSim(matchCfg());acc=0;endAt=0;for(const k in cache)delete cache[k];
-  $('result').classList.remove('show');$('start').classList.toggle('show',!run);mode=run?'run':'idle'}
-function frame(now){
-  const dt=Math.min(0.1,(now-prev)/1000||0);prev=now;clock+=dt;
-  if(mode==='run'){acc+=dt*speed;while(acc>=STEP){sim.step(STEP);acc-=STEP}
-    if(sim.S.over){mode='over';endAt=now}}
-  else if(mode==='over'&&endAt&&now-endAt>1500){endAt=0;finish()}
-  draw();hud();requestAnimationFrame(frame);
+function onFrame(f,id,now){
+  if(id!==matchId){matchId=id;fa=null;overAt=0;shownFor=null;for(const k in cache)delete cache[k];$('result').classList.remove('show')}
+  if(fb&&f.t<fb.t)fa=null;
+  fa=fb&&f.t>=fb.t?fb:null;if(fa)gap=Math.max(16,Math.min(200,now-fbAt));fb=f;fbAt=now;
+  $('start').classList.remove('show');
+  if(f.over&&!overAt)overAt=now;
 }
-$('btnStart').onclick=()=>reset(true);
-$('btnAgain').onclick=()=>reset(true);
-$('btnRestart').onclick=()=>reset(false);
-$('btnSpeed').onclick=()=>{speed=speed===1?2:1;$('btnSpeed').textContent=speed+'×'};
-// Opened through server/server.js: both sides ask their model for every move.
-// Opened as a plain file: the scripted preview above.
-function applyNames(){
+function setPlayers(players){
+  NAMES=players.map(p=>p.name);MARK=NAMES.map(n=>n.toUpperCase());
+  $('sub0').textContent=players[0].model;$('sub1').textContent=players[1].model+(players[1].effort?' · '+players[1].effort:'');
   for(const i of[0,1]){$('nm'+i).textContent=NAMES[i];$('th'+i).textContent=NAMES[i];$('plate'+i).setAttribute('aria-label',NAMES[i])}
   $('vsA').textContent=NAMES[1];$('vsB').textContent=NAMES[0];
   cv.setAttribute('aria-label','Two-lane arena battle between '+NAMES[0]+' and '+NAMES[1]);
   document.title=NAMES[1]+' vs '+NAMES[0]+': System One Arena';
   paintGround();
 }
-applyNames();
-fetch('/api/config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(c=>{
-  if(!c||!c.live)return;
-  LIVE=c;NAMES=c.players.map(p=>p.name);MARK=NAMES.map(n=>n.toUpperCase());
-  const p=c.players,dry=c.dryRun?' (dry run)':'';
-  $('sub0').textContent=p[0].model+dry;$('sub1').textContent=p[1].model+(p[1].effort?' · '+p[1].effort:'')+dry;
-  $('lat').textContent=c.dryRun?'Dry run: no model is called':'Live: every move is a real model call';
-  $('note').textContent=c.dryRun?'Dry run: canned answers through the live pipeline.':'Both sides got the same board and options. Each move came from its model.';
-  $('foot').textContent=c.dryRun?'Dry run through the live pipeline. Answers are canned, no model is called.'
-    :'Live match. Every move is a real OpenRouter call; the clock keeps running while a model thinks.';
-  speed=1;$('btnSpeed').hidden=true;
-  applyNames();
-}).catch(()=>{});
-requestAnimationFrame(frame);
+
+/* Live: one EventSource; the server pushes every frame. */
+function live(){
+  const es=new EventSource('/api/stream');
+  es.addEventListener('hello',e=>{const h=JSON.parse(e.data);setPlayers(h.players)});
+  es.addEventListener('frame',e=>{const m=JSON.parse(e.data);onFrame(m.frame,m.match,performance.now())});
+  es.onerror=()=>{$('lat').textContent='Reconnecting to the arena…'};
+  es.onopen=()=>{if(!fb)$('lat').textContent=CONFIG&&CONFIG.can_start?'Every move is a live model call':'Waiting for the next match…'};
+}
+/* Replay: fetch a recorded match and play it back on its own clock. */
+let rframes=null,rStart=0;
+function replay(id){
+  fetch('/api/matches/'+encodeURIComponent(id)+'/frames').then(r=>{if(!r.ok)throw new Error('no such match');return r.text()}).then(t=>{
+    rframes=t.trim().split('\n').map(l=>JSON.parse(l));rStart=performance.now();$('btnReplay').hidden=false;
+    return fetch('/api/matches').then(r=>r.json()).then(j=>{const m=j.matches.find(m=>m.id===id)||{};
+      $('foot').textContent='Replay of match '+id+'. '+(m.mock?'Recorded with mock OpenRouter: no model was called.':'Recorded live: every move was a model call.');
+      if(m.mock)$('note').textContent='Mock run: answers came from mock_openrouter, not a model.'});
+  }).catch(e=>{$('lat').textContent='Replay unavailable: '+e.message});
+}
+function replayView(now){
+  if(!rframes)return null;
+  const t=(now-rStart)/1000;let i=rframes.findIndex(f=>f.t>t);
+  if(i<0){const f=rframes[rframes.length-1];if(matchId!=='replay'){matchId='replay'}if(!overAt)overAt=now;return f}
+  matchId='replay';$('start').classList.remove('show');
+  if(i===0)return rframes[0];
+  const a=rframes[i-1],b=rframes[i];return lerpFrame(a,b,(t-a.t)/((b.t-a.t)||1));
+}
+
+function loop(now){
+  const dt=Math.min(0.1,(now-prev)/1000||0);prev=now;clock+=dt;
+  view=REPLAY?replayView(now):(fb?lerpFrame(fa,fb,(now-fbAt)/gap):null);
+  if(view&&view.over&&view.result&&overAt&&now-overAt>1500&&shownFor!==matchId){shownFor=matchId;showResult(view.result)}
+  draw();hud();requestAnimationFrame(loop);
+}
+function startMatch(){
+  fetch('/api/matches',{method:'POST',headers:AUTH}).then(r=>r.json().then(j=>{if(!r.ok)throw new Error(j.detail||r.status)}))
+    .catch(e=>{$('lat').textContent='Could not start: '+e.message;$('start').classList.add('show')});
+}
+$('btnStart').onclick=startMatch;
+$('btnAgain').onclick=()=>{$('result').classList.remove('show');startMatch()};
+$('btnReplay').onclick=()=>{rStart=performance.now();overAt=0;shownFor=null;$('result').classList.remove('show')};
+
+fetch('/api/config',{cache:'no-store',headers:AUTH}).then(r=>r.json()).then(c=>{
+  CONFIG=c;setPlayers(c.players);
+  if(c.mock){$('foot').textContent='Mock OpenRouter: answers come from mock_openrouter, no model is called.';
+    $('note').textContent='Mock run: answers came from mock_openrouter, not a model.'}
+  $('btnStart').hidden=!c.can_start||!!REPLAY;
+  $('lat').textContent=REPLAY?'Loading replay…':c.can_start?'Every move is a live model call':'Waiting for the next match…';
+  if(REPLAY)replay(REPLAY);else live();
+}).catch(()=>{$('lat').textContent='The arena service is not reachable.'});
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>

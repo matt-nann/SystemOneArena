@@ -33,6 +33,18 @@ uv run python -m arena                 # http://localhost:8000
 
 Open `http://localhost:8000` and press **Start match**. With `ARENA_ADMIN_TOKEN` set, only `http://localhost:8000/?admin=<token>` shows the button. Everyone else just watches.
 
+### With Docker (OrbStack)
+
+```sh
+docker compose up --build             # arena on :8000, mock OpenRouter on :8790
+```
+
+The arena calls the mock container over the compose network, so no key is needed. Match logs land in `./logs`. To play the real models, put `OPENROUTER_API_KEY` in `.env` and run:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.real.yml up --build arena
+```
+
 ## Run it cheaply: Jev against Jev
 
 Both sides on the Decisions endpoint, a short match, one call per side per second at most, and a hard cap:

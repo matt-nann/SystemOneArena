@@ -1,0 +1,8 @@
+# Override: point the arena at the real OpenRouter (needs OPENROUTER_API_KEY in .env).
+services:
+  arena:
+    environment:
+      OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+      OPENROUTER_DECISIONS_URL: https://openrouter.ai/api/alpha/decisions
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in .env}
+    depends_on: !reset []

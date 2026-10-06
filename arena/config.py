@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Cost controls. A gap between one side's calls (0 asks again as soon as an answer lands),
     # and a cap on calls per match: when it is reached no more requests go out and the match ends.
     DECISION_MIN_INTERVAL: float = 0.0
+    # How fast the world runs (troops, attacks, tower fire, elixir); the clock and latencies stay real.
+    MATCH_PACE: float = 1.0
     MAX_CALLS_PER_MATCH: int = 0
 
     # ── Service ──────────────────────────────────────────────────────

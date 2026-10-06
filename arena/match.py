@@ -52,7 +52,7 @@ class MatchRunner:
             raise MatchInProgress(self.match_id)
         self.match_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         self.sim = Sim(SimConfig(seed=self.settings.MATCH_SEED, duration=duration or self.settings.MATCH_SECONDS,
-                                 min_interval=self.settings.DECISION_MIN_INTERVAL))
+                                 min_interval=self.settings.DECISION_MIN_INTERVAL, pace=self.settings.MATCH_PACE))
         self.calls, self.cost = [0, 0], [0.0, 0.0]
         self.log_dir.mkdir(parents=True, exist_ok=True)
         # Everything tools/rerun.py needs to replay the match through the engine without the models.

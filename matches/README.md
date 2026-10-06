@@ -1,6 +1,22 @@
 # Recorded matches
 
-Three real matches between **Jev** (`typesafe/jev-1.13`, OpenRouter's Decisions endpoint) and
+## Jev vs Sol (the match in the video)
+
+One real match between **Jev** (`typesafe/jev-1.13`) and **Sol** (`openai/gpt-6-sol`, a frontier model with
+reasoning, through chat completions with a strict JSON schema), played on 6 October 2026. Jev took the king tower.
+
+| Match | Winner | Towers | Avg decision | Decisions | Cost |
+| --- | --- | --- | --- | --- | --- |
+| `20261006T033204917151Z` | Jev, king tower at 28.7s | 3–0 | 0.20s vs 4.0s | 20 vs 6 | Jev $0.0013, Sol $0.0274 |
+
+Per call Jev cost $0.000065 and Sol $0.0039 (61×); for the whole match Jev cost 21× less. Settings: a 45-second
+cap, world pace 1.25 (`MATCH_PACE`: troops, attacks, tower fire and elixir 25% faster, while the clock and every
+latency stay in real seconds), at most one decision per side per second, and a 1.5-second pre-roll for the
+start banner.
+
+## Jev vs Luna
+
+Three earlier real matches between **Jev** (`typesafe/jev-1.13`, OpenRouter's Decisions endpoint) and
 **Luna** (`openai/gpt-6-luna`, a reasoning model, through chat completions with a strict JSON
 schema), played on 6 October 2026. Every move was a live model call. Jev won all three.
 

@@ -48,6 +48,14 @@ MAX_CALLS_PER_MATCH=60
 
 That is at most 60 calls a match (about 50 in practice). Each match's result in `logs/<id>.jsonl` records `calls` and `cost_usd` per side, summed from the `usage.cost` OpenRouter returns. When the cap is reached, no more requests go out and the match ends where it stands.
 
+## Recorded matches and video
+
+`matches/` holds three real Jev vs Luna matches (Jev won 3–0) with every request and raw answer. Anyone can watch, re-simulate and record them without a key or a model call. See [`matches/README.md`](matches/README.md).
+
+- `tools/archive.py <id>` copies a match from `logs/` into `matches/`.
+- `tools/rerun.py <id>` replays a match's decisions through the engine and checks it ends the same way.
+- `tools/record.py <id>` writes a 1080×1920 H.264 MP4 of a replay, stepping the viewer frame by frame (`?record`) in headless Chrome, so nothing stutters or drops.
+
 ## Mock OpenRouter
 
 `mock_openrouter/` stands in for OpenRouter itself. It serves the same paths and wire format (`POST /api/v1/chat/completions`, `POST /api/alpha/decisions`, `GET /api/v1/models`), so the real client code runs unchanged against it. It follows the pattern of Aven's `tests/stubs/llm`, scripted responses plus `/admin/*`, but speaks OpenRouter's format instead of Aven's internal one, and it also covers Decisions.
@@ -159,4 +167,6 @@ The suite runs without network. It covers the frame fields the viewer draws (dec
 | `web/demo-sim.js` | Browser port of the engine and playbook, for `?demo` only |
 | `web/tinyswords/` | Tiny Swords art (CC0) and its license note |
 | `tools/tinyswords.py` | Copies the art the viewer uses out of the Tiny Swords zip |
+| `tools/archive.py`, `tools/rerun.py`, `tools/record.py` | Archive a match, re-simulate it from its log, record it as video |
+| `matches/` | Recorded matches committed to the repo |
 | `tools/jev_probe.py` | Asks Jev about hand-made boards and scores its answers, for tuning the wording cheaply |

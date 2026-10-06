@@ -27,6 +27,7 @@ class Move:
     usage: Dict[str, Any] = field(default_factory=dict)
     confidence: Optional[float] = None
     request: Dict[str, Any] = field(default_factory=dict)
+    answer: Any = None  # what the model returned, before it was turned into a move
 
 
 def jev_request(settings: Settings, snap: Dict[str, Any], model: Optional[str] = None) -> Dict[str, Any]:
@@ -73,7 +74,7 @@ class Players:
         return [
             {"id": "jev", "name": s.JEV_NAME, "model": s.JEV_MODEL, "effort": None, "role": "Fast decision model"},
             {"id": "sol", "name": s.SOL_NAME, "model": s.SOL_MODEL, "effort": None if sol_fast else (s.SOL_REASONING_EFFORT or None),
-             "role": "Fast decision model" if sol_fast else "Frontier model"},
+             "role": s.SOL_ROLE or ("Fast decision model" if sol_fast else "Frontier model")},
         ]
 
     async def decide(self, who: str, snap: Dict[str, Any]) -> Move:
@@ -97,7 +98,7 @@ class Players:
         if "card" not in answers or "lane" not in answers:
             raise OpenRouterError(200, "decisions response did not answer every question")
         card, lane = game.to_move(snap, answers["card"].get("choice"), answers["lane"].get("choice"))
-        return Move(card, lane, ms, raw.get("model"), raw.get("usage") or {}, answers["card"].get("confidence"), body)
+        return Move(card, lane, ms, raw.get("model"), raw.get("usage") or {}, answers["card"].get("confidence"), body, answers)
 
     async def _sol(self, snap: Dict[str, Any]) -> Move:
         s = self.settings
@@ -110,4 +111,4 @@ class Players:
         move = out["output"] if isinstance(out["output"], dict) else {}
         card, lane = game.to_move(snap, move.get("card"), move.get("lane"))
         return Move(card, lane, ms, out["model"], out["usage"], None,
-                    {"model": s.SOL_MODEL, "messages": messages, "schema": schema})
+                    {"model": s.SOL_MODEL, "messages": messages, "schema": schema}, out["output"])

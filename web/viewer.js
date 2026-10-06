@@ -13,9 +13,18 @@ const $=id=>document.getElementById(id);
 const QS=new URLSearchParams(location.search);
 const MODE=(window.ARENA_DEMO||QS.has('demo'))?'demo':QS.get('replay')?'replay':'live';
 const ADMIN=QS.get('admin'),AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
-const INTRO=3.2,OUTRO_DELAY=1.4;
+// Replays and the demo go straight into the match: the first caption names the two models instead of an opening card.
+// The start banner holds over a frozen board for BANNER_HOLD seconds, then the clock starts. Live, the server's
+// pre-roll (MATCH_PREROLL_SECONDS) freezes the board; in replays and the demo the viewer holds the first frame.
+const BANNER_HOLD=1.5,INTRO=MODE==='live'?0:BANNER_HOLD,OUTRO_DELAY=1.4;
+let bannerStart=-99;
+let LAT=null;  // each side's average decision time, when known before the match plays (replay, demo)
 // ?at=<seconds> starts a demo or replay that far into the match (skipping the opening card); ?pause starts it paused.
 const AT=Math.max(0,parseFloat(QS.get('at'))||0);
+// ?record (with ?replay or ?demo): only the frame, at 1:1, and time advances only when tools/record.py calls
+// window.arenaRecord.step(dt), so every video frame is exactly 1/fps apart.
+const RECORD=QS.has('record');
+if(RECORD)document.body.classList.add('clean','record');
 const ROLES=['Fast decision model','Frontier model'];
 let NAMES=['Jev','Sol'],CONFIG=null,MIRROR=false;
 
@@ -51,15 +60,17 @@ function preload(){for(const t of TEAM)for(const n of['warrior','archer','torch'
 preload();
 
 /* ---------- arena canvas ---------- */
-const cv=$('cv');let ctx=cv.getContext('2d'),U=10,P=U/64;   // U: canvas px per board tile; P: canvas px per art px
+const cv=$('cv');let ctx=cv.getContext('2d'),U=10,P=U/64,OX=0;  // OX: canvas px from the canvas edge to the playfield's left edge   // U: canvas px per board tile; P: canvas px per art px
 const land=document.createElement('canvas');
 const OL='#1d1a2b',GOLD='#ffcb45',TAU=Math.PI*2;
 const TC=[{m:'#3d8bff',d:'#1f5bcc',l:'#a9d0ff'},{m:'#f24a40',d:'#b3261f',l:'#ffb0a8'}];
 const DISPLAY='"Lilita One","Arial Rounded MT Bold","Arial Black",sans-serif',MONO='"JetBrains Mono",ui-monospace,Menlo,monospace';
 function sizeArena(){
   // The arena keeps the board's 18:28 shape; its height decides the width of the whole board.
-  const h=$('field').clientHeight,w=Math.round(h*W/H);
-  $('board').style.width=(w+10)+'px';cv.style.width=w+'px';cv.style.height=h+'px';cv.width=w*2;cv.height=h*2;U=cv.width/W;P=U/64;paintLand();
+  const h=$('field').clientHeight;
+  // The board spans the frame edge to edge; the 18x28 playfield sits centred and the strips either side are scenery.
+  const fw=$('field').clientWidth;
+  cv.style.width=fw+'px';cv.style.height=h+'px';cv.width=fw*2;cv.height=h*2;U=cv.height/H;P=U/64;OX=(cv.width-W*U)/2;paintLand();
 }
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 function C(x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,TAU)}
@@ -81,22 +92,23 @@ function paintLand(){
   land.width=cv.width;land.height=cv.height;const g=land.getContext('2d');g.imageSmoothingEnabled=false;
   const T=U,top=(RIVER-1)*U,bot=(RIVER+1)*U;
   // grass and dirt lanes: a pixel-art texture generated once (see groundTexture), scaled up crisp
-  g.drawImage(groundTexture(),0,0,land.width,land.height);
+  g.drawImage(groundTexture(),OX-EX*U,0,(W+2*EX)*U,land.height);
   g.clearRect(0,top,land.width,bot-top);
   g.fillStyle='rgba(242,74,64,.05)';g.fillRect(0,0,land.width,top);g.fillStyle='rgba(61,139,255,.06)';g.fillRect(0,bot,land.width,land.height-bot);
   g.fillStyle='#4a8a33';g.fillRect(0,top-0.12*U,land.width,0.12*U);g.fillStyle='#3d7a2b';g.fillRect(0,bot,land.width,0.08*U);
   // decorations away from the lanes
-  const dec=(n,x,y,k)=>{const d=img('decor/'+n);if(ready(d))g.drawImage(d,0,0,d.width,d.height,x*U-d.width*P*k/2,y*U-d.height*P*k,d.width*P*k,d.height*P*k)};
+  const dec=(n,x,y,k)=>{const d=img('decor/'+n);if(ready(d))g.drawImage(d,0,0,d.width,d.height,OX+x*U-d.width*P*k/2,y*U-d.height*P*k,d.width*P*k,d.height*P*k)};
   for(const[n,x,y]of[['04',1.6,11.6],['07',16.6,11.7],['08',2.0,16.8],['09',15.9,17.2],['10',7.1,9.4],['11',11.2,19.0],['05',12.2,8.8],['04',6.4,19.6]])dec(n,x,y,1);
-  ctx.save();const m=ctx;ctx=g;ctx.globalAlpha=0.3;label(NAMES[1].toUpperCase(),9*U,10*U,2.6*U,TC[1].l,0.35*U);label(NAMES[0].toUpperCase(),9*U,18*U,2.6*U,TC[0].l,0.35*U);ctx=m;ctx.restore();
+  ctx.save();const m=ctx;ctx=g;ctx.globalAlpha=0.42;label(NAMES[1].toUpperCase(),OX+9*U,10*U,3.3*U,TC[1].l,0.4*U);label(NAMES[0].toUpperCase(),OX+9*U,18*U,3.3*U,TC[0].l,0.4*U);ctx=m;ctx.restore();
 }
 /* Ground texture, drawn once at 32 texels per board tile (2 Tiny Swords pixels each) so it matches the sprites'
    pixel scale. Grass: soft patches, tufts with light tips, a few flowers. Lanes: sand with speckles and pebbles,
    a wobbly edge, a darker sand rim and a grass shadow. Seeded, so every match looks the same. */
 let GROUND=null;
+const EX=4;  // tiles of scenery generated beyond each side of the playfield
 function groundTexture(){
   if(GROUND)return GROUND;
-  const S=32,w=W*S,h=H*S,c=document.createElement('canvas');c.width=w;c.height=h;
+  const S=32,w=(W+2*EX)*S,h=H*S,c=document.createElement('canvas');c.width=w;c.height=h;
   const g=c.getContext('2d'),id=g.createImageData(w,h),px=id.data;
   const hash=(x,y,k)=>{let n=(Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(k,1013904223))|0;n=Math.imul(n^(n>>>13),1274126177);return((n^(n>>>16))>>>0)/4294967296};
   const smooth=(x,y,k)=>{const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
@@ -106,7 +118,7 @@ function groundTexture(){
   const D=['#e8cf8c','#dbbd74','#f3dfa3','#c49e5c','#b48a4a'].map(hex);             // sand: base, speckle, light, rim, pebble
   const put=(x,y,col)=>{if(x<0||y<0||x>=w||y>=h)return;const i=(y*w+x)*4;px[i]=col[0];px[i+1]=col[1];px[i+2]=col[2];px[i+3]=255};
   // lanes in texels, as boxes [cx, cy, half-width, half-height]
-  const boxes=[];const R=(x0,y0,x1,y1)=>boxes.push([(x0+x1)/2*S,(y0+y1)/2*S,(x1-x0)/2*S,(y1-y0)/2*S]);
+  const boxes=[];const R=(x0,y0,x1,y1)=>boxes.push([(x0+x1)/2*S+EX*S,(y0+y1)/2*S,(x1-x0)/2*S,(y1-y0)/2*S]);
   for(const lx of LANES){R(lx-0.8,5.5,lx+0.8,RIVER-0.6);R(lx-0.8,RIVER+0.6,lx+0.8,22.5)}
   R(4,4.75,14,6.25);R(4,21.75,14,23.25);R(8.25,2.4,9.75,5.5);R(8.25,22.5,9.75,25.6);
   const kind=new Uint8Array(w*h);   // 0 grass, 1 grass shadow, 2 sand rim, 3 sand
@@ -137,10 +149,10 @@ function groundTexture(){
 }
 function drawWater(clock){
   const top=(RIVER-1.6)*U,h=3.2*U,wi=img('terrain/water');
-  ctx.fillStyle='#47aba9';ctx.fillRect(0,top,cv.width,h);
+  ctx.fillStyle='#47aba9';ctx.fillRect(-OX,top,cv.width,h);
   const fo=img('terrain/foam');
   if(ready(fo)){const T=U,f0=Math.floor(clock*8);
-    for(const[edge,dy]of[[(RIVER-1)*U,-T],[(RIVER+1)*U,0]])for(let x=0,i=0;x<cv.width;x+=T,i++){
+    for(const[edge,dy]of[[(RIVER-1)*U,-T],[(RIVER+1)*U,0]])for(let x=-Math.ceil(OX/T)*T,i=0;x<cv.width-OX;x+=T,i++){
       const f=(f0+i*3)%8;ctx.drawImage(fo,f*192,0,192,192,x+T/2-1.75*T,edge+dy+T/2-1.75*T,3.5*T,3.5*T)}}
   const wr=img('terrain/water_rocks');
   if(ready(wr))for(const[x,i]of[[1.3,0],[16.6,3]]){const f=(Math.floor(clock*6)+i)%8;ctx.drawImage(wr,f*128,0,128,128,(x-1)*U,(RIVER-1)*U,2*U,2*U)}
@@ -150,11 +162,20 @@ function drawBridges(){
   for(const lx of LANES){const x=lx*U-T/2,y0=(RIVER-1.5*k)*U;
     ctx.drawImage(b,0,64,64,64,x,y0,T,T);ctx.drawImage(b,0,128,64,64,x,y0+T,T,T);ctx.drawImage(b,0,192,64,64,x,y0+2*T,T,T)}
 }
+// Trees filling the strips beside the playfield (and lining its edges), back to front, clear of the river.
+let FOREST_AT=null,FOREST_LIST=[];
+function FOREST(){
+  const side=OX/U;if(FOREST_AT===side)return FOREST_LIST;FOREST_AT=side;FOREST_LIST=[];
+  const cols=[];for(let x=-0.2;x>-side-0.8;x-=1.25)cols.push(x);
+  for(const c of cols)for(let y=1.2,k=0;y<H+1;y+=1.55,k++){
+    if(Math.abs(y-RIVER)<1.9)continue;const j=((k*7+Math.round(c*13))%5)/10;
+    FOREST_LIST.push([c-j*0.4,y+j,k%4],[W-c+j*0.4,y+0.7-j,(k+2)%4])}
+  FOREST_LIST.sort((a,b)=>a[1]-b[1]);return FOREST_LIST;
+}
 function drawEdgeDecor(clock){
   // trees along both sides, swaying; a sheep on each bank
   const tr=img('decor/tree');
-  if(ready(tr))for(const[x,y,i]of[[-0.2,3.2,0],[18.1,6.4,1],[-0.4,9.0,2],[18.3,12.0,3],[-0.3,17.6,1],[18.2,20.4,2],[-0.2,24.8,3],[18.1,27.4,0]]){
-    const f=(Math.floor(clock*5)+i)%4;cell(tr,192,192,f,0,96,176,x*U,y*U,1.0)}
+  if(ready(tr))for(const[x,y,i]of FOREST()){const f=(Math.floor(clock*5)+i)%4;cell(tr,192,192,f,0,96,176,x*U,y*U,1.0)}
   const sh=img('decor/sheep');
   if(ready(sh))for(const[x,y,i]of[[16.4,3.2,0],[1.8,26.6,4]]){const f=(Math.floor(clock*6)+i)%8;cell(sh,128,128,f,0,64,86,x*U,y*U,0.9,i>0)}
 }
@@ -185,11 +206,32 @@ function hpBar(x,y,w,h,frac,side,num){
   if(frac>0){rr(x-w/2,y,Math.max(h*0.6,w*frac),h,h*0.4);fs(TC[side].m,0)}
   if(num!=null)label(String(num),x,y+h*0.55,h*1.45,'#fff',h*0.45);
 }
-function towerBar(t){
-  const king=t.kind==='K',bw=(king?3.4:2.8)*U,bh=0.55*U;
+// Tower health, Clash style: a team badge (crown or turret) on the left, a glossy fill, the number on top, and a
+// yellow trail that drains away after each hit so damage is visible at a glance.
+const TRAIL={};let trailClock=0;
+function towerBar(t,clock){
+  const king=t.kind==='K',bw=(king?3.6:3.0)*U,bh=0.62*U,frac=Math.max(0,t.hp/t.max),key=t.side+t.kind;
   // Bars sit on the far side from the fighting: above Sol's towers, below Jev's.
-  const y=king?(t.side===1?0.15*U:(H-0.15)*U-bh):t.side===1?(t.y-2.85)*U:(t.y+1.15)*U;
-  hpBar(t.x*U,y,bw,bh,t.hp/t.max,t.side,Math.ceil(t.hp));
+  const y=king?(t.side===1?0.12*U:(H-0.12)*U-bh):t.side===1?(t.y-2.9)*U:(t.y+1.15)*U;
+  const tr=TRAIL[key];if(!tr||frac>tr.v)TRAIL[key]={v:frac};else tr.v=Math.max(frac,tr.v-Math.max(0,clock-trailClock)*0.9);
+  const x0=t.x*U-bw/2,r=bh*0.45,tc=TC[t.side];
+  rr(x0,y,bw,bh,r);fs('#241c38',OL,Math.max(2,0.11*U));
+  ctx.save();rr(x0,y,bw,bh,r);ctx.clip();
+  ctx.fillStyle='#ffe066';ctx.fillRect(x0,y,bw*TRAIL[key].v,bh);
+  const g=ctx.createLinearGradient(0,y,0,y+bh);g.addColorStop(0,tc.l);g.addColorStop(0.45,tc.m);g.addColorStop(1,tc.d);
+  ctx.fillStyle=g;ctx.fillRect(x0,y,bw*frac,bh);
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.fillRect(x0,y+bh*0.14,bw*frac,bh*0.16);
+  ctx.restore();rr(x0,y,bw,bh,r);ctx.strokeStyle=OL;ctx.lineWidth=Math.max(2,0.11*U);ctx.stroke();
+  // badge
+  const bx=x0,byc=y+bh/2,br=bh*0.82;
+  C(bx,byc,br);fs(tc.d,OL,Math.max(2,0.11*U));C(bx,byc,br*0.72);fs(tc.m,0);
+  ctx.save();ctx.translate(bx,byc);ctx.scale(br,br);
+  if(king){crown(0,0.05,0.48);fs(GOLD,OL,0.1)}
+  else{ctx.beginPath();ctx.moveTo(-0.38,0.45);ctx.lineTo(-0.38,-0.2);ctx.lineTo(-0.46,-0.2);ctx.lineTo(-0.46,-0.48);ctx.lineTo(-0.26,-0.48);ctx.lineTo(-0.26,-0.34);
+    ctx.lineTo(-0.1,-0.34);ctx.lineTo(-0.1,-0.48);ctx.lineTo(0.1,-0.48);ctx.lineTo(0.1,-0.34);ctx.lineTo(0.26,-0.34);ctx.lineTo(0.26,-0.48);ctx.lineTo(0.46,-0.48);
+    ctx.lineTo(0.46,-0.2);ctx.lineTo(0.38,-0.2);ctx.lineTo(0.38,0.45);ctx.closePath();fs('#fff',OL,0.09)}
+  ctx.restore();
+  label(String(Math.ceil(t.hp)),x0+bw/2+br*0.35,y+bh*0.55,bh*1.15,'#fff',bh*0.36);
 }
 
 /* troops */
@@ -211,7 +253,8 @@ function troopBar(u){const A=UNIT[u.type],top=(u.y+0.45)*U-A.tall*P*A.scale-0.25
 function draw(S,clock){
   ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.imageSmoothingEnabled=false;
   ctx.fillStyle='#62a14a';ctx.fillRect(0,0,cv.width,cv.height);
-  drawWater(clock);ctx.drawImage(land,0,0);drawBridges();
+  ctx.setTransform(1,0,0,1,OX,0);
+  drawWater(clock);ctx.drawImage(land,-OX,0);drawBridges();
   const left=Math.max(0,Math.ceil(S.dur-S.t));
   rr(7.1*U,(RIVER-0.85)*U,3.8*U,1.7*U,0.85*U);fs('#1b1830',OL,0.12*U);
   label(Math.floor(left/60)+':'+String(left%60).padStart(2,'0'),9*U,(RIVER+0.06)*U,1.1*U,'#fff',0.2*U);
@@ -229,7 +272,7 @@ function draw(S,clock){
   const things=[];for(const t of S.towers)things.push({y:t.y+(t.kind==='K'?1.4:1.0),t});for(const u of S.units)things.push({y:u.y+0.45,u});
   things.sort((a,b)=>a.y-b.y);
   for(const o of things){if(o.t)drawTower(S,o.t,clock);else troop(o.u,S.t,clock,S.t-o.u.hit<0.08?0.6:null)}
-  for(const t of S.towers)if(t.alive)towerBar(t);
+  for(const t of S.towers)if(t.alive)towerBar(t,clock);trailClock=clock;
   for(const u of S.units)if(u.hp<u.max||u.max>=900)troopBar(u);
 
   for(const s of S.shots){const p=Math.min(1,(S.t-s.t)/0.25),x=(s.x1+(s.x2-s.x1)*p)*U,y=(s.y1+(s.y2-s.y1)*p)*U,a=Math.atan2(s.y2-s.y1,s.x2-s.x1);
@@ -241,11 +284,11 @@ function draw(S,clock){
       if(a<0.45){const k=a/0.45;ctx.globalAlpha=1-k;ctx.strokeStyle='#fff';ctx.lineWidth=0.18*U;ctx.beginPath();ctx.ellipse(x,y+0.4*U,(0.6+1.6*k)*U,(0.25+0.6*k)*U,0,0,TAU);ctx.stroke();ctx.globalAlpha=1}
       const life=a/1.4,pop=Math.min(1,a/0.12),cy=y+(f.side===0?3.2:-3.2)*U-(f.side===0?-1:1)*life*0.4*U,s=U*pop;
       ctx.globalAlpha=life<0.7?1:Math.max(0,1-(life-0.7)/0.3);
-      ctx.setTransform(s,0,0,s,x,cy);rr(-1.5,-1.75,3,3.5,0.3);fs('#fff4d6',TC[f.side].d,0.22);rr(-1.5,-1.75,3,3.5,0.3);ctx.strokeStyle=OL;ctx.lineWidth=0.07;ctx.stroke();
+      ctx.setTransform(s,0,0,s,OX+x,cy);rr(-1.5,-1.75,3,3.5,0.3);fs('#fff4d6',TC[f.side].d,0.22);rr(-1.5,-1.75,3,3.5,0.3);ctx.strokeStyle=OL;ctx.lineWidth=0.07;ctx.stroke();
       rr(-1.25,-1.5,2.5,2.05,0.2);fs(TC[f.side].l,0);
       if(f.lat!=null){rr(-1.35,1.95,2.7,0.95,0.45);fs(f.side===0?TC[0].d:'#ffe066',OL,0.08)}
-      ctx.setTransform(s,0,0,s,x-1.5*s,cy-1.6*s);ctx.beginPath();ctx.arc(0,0.12,0.58,-Math.PI*0.25,Math.PI*1.25);ctx.lineTo(0,-0.78);ctx.closePath();fs('#f255f0',OL,0.12);
-      ctx.setTransform(1,0,0,1,0,0);
+      ctx.setTransform(s,0,0,s,OX+x-1.5*s,cy-1.6*s);ctx.beginPath();ctx.arc(0,0.12,0.58,-Math.PI*0.25,Math.PI*1.25);ctx.lineTo(0,-0.78);ctx.closePath();fs('#f255f0',OL,0.12);
+      ctx.setTransform(1,0,0,1,OX,0);
       const A=UNIT[f.type];
       // portrait: the idle frame cropped to the character and fitted to the card's window
       const pim=A&&img(TEAM[f.side]+'/'+A.sheet);
@@ -259,17 +302,19 @@ function draw(S,clock){
     else if(f.kind==='pop'){cell(img('fx/dead'),128,128,Math.floor(a/0.1)%7,a<0.7?0:1,65,99,x,y+0.45*U,0.7)}
     else if(f.kind==='fall'){
       if(a<0.9)strip('fx/explosion',192,192,Math.floor(a/0.9*9),96,96,x,y,2.6);
-      const k=a/1.4;ctx.globalAlpha=Math.max(0,1-k*k);ctx.setTransform(U,0,0,U,x,y-(1+k*2.5)*U);crown(0,0,1.1);fs(GOLD,OL,0.14);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1}
+      const k=a/1.4;ctx.globalAlpha=Math.max(0,1-k*k);ctx.setTransform(U,0,0,U,OX+x,y-(1+k*2.5)*U);crown(0,0,1.1);fs(GOLD,OL,0.14);ctx.setTransform(1,0,0,1,OX,0);ctx.globalAlpha=1}
   }
-  // thinking bubble beside each king that is still waiting on its model
+  // thinking bubble in the open grass beside and behind each king that is still waiting on its model, its tail
+  // pointing at the castle: troops attack from the front, so the fight is never under it
   for(const i of[1,0]){const sd=S.sides[i],kt=S.towers.find(t=>t.side===i&&t.kind==='K');
     if(!sd||S.over||sd.thinking_since==null||!kt.alive)continue;const el=S.t-sd.thinking_since;if(el<0.6)continue;
-    const bx=14.6,by=i===1?1.9:H-1.9;ctx.setTransform(U,0,0,U,0,0);
-    ctx.beginPath();ctx.moveTo(11.7,by-0.35);ctx.lineTo(10.7,by+(i===1?0.5:-0.5));ctx.lineTo(11.7,by+0.35);ctx.closePath();fs('#fff',OL,0.12);
-    rr(bx-3.1,by-1.05,6.2,2.1,0.7);fs('#fff',OL,0.12);ctx.fillStyle='#fff';ctx.fillRect(11.55,by-0.28,0.3,0.56);
-    ctx.beginPath();ctx.arc(bx-2.05,by,0.62,-Math.PI/2,-Math.PI/2+TAU*Math.min(1,el/8));ctx.strokeStyle=TC[i].m;ctx.lineWidth=0.2;ctx.stroke();
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.font=`800 ${0.95*U}px ${MONO}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=TC[i].d;ctx.fillText(el.toFixed(1)+'s',(bx+0.55)*U,(by+0.05)*U)}
+    const bx=14.1,by=i===1?1.45:H-1.45;ctx.setTransform(U,0,0,U,OX,0);
+    // ring on the left with padding, the seconds left-aligned after a clear gap
+    ctx.beginPath();ctx.moveTo(bx-2.2,by-0.4);ctx.lineTo(bx-3.0,by);ctx.lineTo(bx-2.2,by+0.4);ctx.closePath();fs('#fff',OL,0.12);
+    rr(bx-2.3,by-0.9,4.6,1.8,0.6);fs('#fff',OL,0.12);ctx.fillStyle='#fff';ctx.fillRect(bx-2.36,by-0.33,0.18,0.66);
+    ctx.beginPath();ctx.arc(bx-1.45,by,0.5,-Math.PI/2,-Math.PI/2+TAU*Math.min(1,el/8));ctx.strokeStyle=TC[i].m;ctx.lineWidth=0.2;ctx.stroke();
+    ctx.setTransform(1,0,0,1,OX,0);
+    ctx.font=`800 ${0.9*U}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle=TC[i].d;ctx.fillText(el.toFixed(1)+'s',(bx-0.65)*U,(by+0.05)*U)}
 }
 
 /* ---------- decision rails ---------- */
@@ -297,7 +342,8 @@ const cache={};
 function set(key,v,fn){if(cache[key]!==v){cache[key]=v;fn(v)}}
 function hud(S){
   for(const i of[0,1]){const s=S.sides[i];
-    set('p'+i,(s.elixir/10).toFixed(3),v=>$('pp'+i).firstChild.style.transform='scaleX('+v+')');
+    // Whole elixir points are solid; the point still charging shows as a translucent segment growing into the next one.
+    set('p'+i,(s.elixir/10).toFixed(3),v=>{const b=$('pp'+i).style;b.setProperty('--c',v);b.setProperty('--v',(Math.floor(s.elixir+1e-6)/10).toFixed(1))});
     set('e'+i,Math.floor(s.elixir+1e-6),v=>$('ex'+i).textContent=v);
     set('cap'+i,s.elixir>=9.99&&!S.over,v=>{$('pp'+i).classList.toggle('capped',v);$('tk'+i).classList.toggle('capped',v)});
     set('d'+i,s.decisions,v=>$('dc'+i).textContent=v);
@@ -318,15 +364,22 @@ function hud(S){
 /* ---------- captions: plain-language narration for sound-off viewing ---------- */
 const capEl=$('cap');let capQueue=[],capShownAt=-99,capFlags={},seenFalls=0;
 function say(key,html){if(capFlags[key])return;capFlags[key]=1;capQueue.push(html)}
-function showCap(html,now){capEl.classList.add('out');setTimeout(()=>{capEl.innerHTML=html;capEl.classList.remove('out')},180);capShownAt=now}
+// Captions shrink until they fit the rail, so a long one never runs into the board.
+function fitCap(){let fs=46;capEl.style.fontSize=fs+'px';while(capEl.scrollHeight>capEl.clientHeight+1&&fs>28){fs-=2;capEl.style.fontSize=fs+'px'}}
+function showCap(html,now){capShownAt=now;if(RECORD){capEl.innerHTML=html;fitCap();return}capEl.classList.add('out');setTimeout(()=>{capEl.innerHTML=html;fitCap();capEl.classList.remove('out')},180)}
 const N=i=>`<span class="${i?'s':'j'}">${NAMES[i]}</span>`;
 function captions(S,now){
   if(!S||!S.sides.length)return;
   const sol=S.sides[1],jev=S.sides[0];
-  if(S.t>0)say('open',`Same board, same rules. The clock keeps running while each model thinks.`);
-  if(jev.avg!=null&&sol.decisions>=1)say('speed',`${N(0)} decides in <span class="n">${jev.avg.toFixed(2)}s</span>. ${N(1)} took <span class="n">${sol.last.lat.toFixed(1)}s</span>.`);
+  const sec=v=>v<1?v.toFixed(2):v.toFixed(1);
+  say('open',LAT?`${N(0)} answers in <span class="n">~${sec(LAT[0])}s</span>. ${N(1)} thinks for <span class="n">~${sec(LAT[1])}s</span>. Same game, same rules.`
+    :`Same game, same rules. Every move is a live model call.`);
+  if(!LAT&&jev.avg!=null&&sol.decisions>=1)say('speed',`${N(0)} decides in <span class="n">${jev.avg.toFixed(2)}s</span>. ${N(1)} took <span class="n">${sol.last.lat.toFixed(1)}s</span>.`);
   if(sol.thinking_since!=null&&S.t-sol.thinking_since>2.5)say('wait',`${N(1)} is still thinking. The match clock keeps running.`);
-  if(sol.ghosts&&S.t-sol.thinking_since>3.5&&S.units.length>2)say('ghost',`The faded troops are the board ${N(1)} is answering. It has already moved.`);
+  // Only when faded troops are actually on screen: a troop that has moved on or died since the slow side was asked.
+  if(sol.ghosts&&S.t-sol.thinking_since>3){const now={};for(const u of S.units)now[u.id]=u;
+    if(sol.ghosts.some(g=>!now[g.id]||Math.hypot(now[g.id].x-g.x,now[g.id].y-g.y)>=1.2))
+      say('ghost',`${N(1)} is still answering an old board. The faded troops show where it was.`)}
   if(jev.decisions>=40)say('count',`${N(0)} has made <span class="n">${jev.decisions}</span> decisions. ${N(1)} has made <span class="n">${sol.decisions}</span>.`);
   const falls=S.towers.filter(t=>!t.alive);
   for(const t of falls){const key='t'+t.side+t.kind;if(capFlags[key])continue;
@@ -343,13 +396,14 @@ function setPlayers(players){
   for(const i of[0,1]){const p=players[i];
     for(const id of['nm','inm','th'])$(id+i).textContent=p.name;
     $('md'+i).textContent=p.model+(p.effort?' · '+p.effort:'');$('imd'+i).textContent=p.model;
-    if(p.role)$('rl'+i).textContent=$('irl'+i).textContent=p.role;}
+    if(p.role)$('rl'+i).textContent=$('irl'+i).textContent=p.role;
+    $('bn'+i).textContent=p.name;}
   MIRROR=players[0].model===players[1].model;
   document.title=NAMES[1]+' vs '+NAMES[0]+': System One Arena';
   paintLand();
 }
 function setLabels(mock){
-  const badge={demo:'SIMULATION',replay:mock?'REPLAY · MOCK':'REPLAY',live:mock?'MOCK OPENROUTER':'LIVE MODEL CALLS'}[MODE];
+  const badge={demo:'SIMULATION',replay:mock?'REPLAY · MOCK':'RECORDED LIVE',live:mock?'MOCK OPENROUTER':'LIVE MODEL CALLS'}[MODE];
   const line={demo:'Same strategy code on both sides. Only decision time differs.',
     replay:mock?'Recorded with mock OpenRouter: no model was called.':'Recorded live: every move was a real model call.',
     live:mock?'Answers come from mock OpenRouter: no model is called.':'Every move is a real model call. The clock never waits.'}[MODE];
@@ -358,7 +412,8 @@ function setLabels(mock){
     replay:mock?'Replay of a mock match: answers came from mock OpenRouter.':'Replay of a live match: each move came from its model through OpenRouter.',
     live:mock?'Mock match: answers came from mock OpenRouter, not a model.':'Live match: each move came from its model through OpenRouter.'}[MODE];
 }
-function introLatency(a,b){for(const[i,v]of[[0,a],[1,b]]){const e=$('ilat'+i);if(v==null){e.hidden=true;continue}
+function introLatency(a,b){LAT=a!=null&&b!=null?[a,b]:null;
+  for(const[i,v]of[[0,a],[1,b]])$('bl'+i).textContent=v==null?'':'~'+(v<1?v.toFixed(2):v.toFixed(1))+'s per move';for(const[i,v]of[[0,a],[1,b]]){const e=$('ilat'+i);if(v==null){e.hidden=true;continue}
   e.firstChild.textContent='~'+(v<1?v.toFixed(2):v.toFixed(1))+'s';e.hidden=false}}
 function showResult(r,dur,t){
   const w=r.winner,sd=r.sides;
@@ -372,11 +427,27 @@ function showResult(r,dur,t){
   // Elixir lost at the cap, in troops: the deck's cards average about 3 elixir.
   row('w',s=>{const n=Math.round(s.elixir_wasted/3);return{n,txt:n?'≈'+n:'0'}},(a,b)=>a<b);
   row('c',s=>({n:s.crowns,txt:String(s.crowns)}),(a,b)=>a>b);
-  const slow=sd[1].avg_decision_s,secs=slow==null?null:Math.round(slow);
-  const words=['zero','one','two','three','four','five','six','seven','eight','nine','ten'];
-  $('thesis').innerHTML=MIRROR?`Same model on both sides. <em>${NAMES[w]}</em> took this one.`:w===0&&secs?`When the world keeps moving, <em>a good answer now</em> beats a better answer in ${words[secs]||secs} seconds.`
+  $('thesis').innerHTML=MIRROR?`Same model on both sides. <em>${NAMES[w]}</em> took this one.`:w===0?`In real time, <em>a late answer is a wrong answer.</em>`
     :`This time ${NAMES[w]} won. <em>Speed is not the whole story.</em>`;
   $('bAgain').hidden=!(MODE==='live'&&CONFIG&&CONFIG.can_start);
+  // The series so far between these two, from the archived matches: one match is an anecdote.
+  $('series').hidden=true;$('r_cost').hidden=true;$('cheaper').hidden=true;
+  if(MODE!=='demo')fetch('api/matches').then(r=>r.json()).then(j=>{
+    // Cost per decision, from this match's logged OpenRouter costs (the frames do not carry them).
+    const me=j.matches.find(m=>m.id===(MODE==='replay'?QS.get('replay'):matchKey));
+    const rr=me&&me.result,cost=rr&&rr.cost_usd,calls=rr&&rr.calls;
+    if(cost&&calls&&calls[0]&&calls[1]&&cost[0]>0&&cost[1]>0){
+      const per=[0,1].map(i=>cost[i]/calls[i]),fmt=v=>'$'+(v*1000).toFixed(2);
+      $('r_k0').textContent=fmt(per[0]);$('r_k1').textContent=fmt(per[1]);
+      $('r_k0').classList.toggle('best',per[0]<per[1]);$('r_k1').classList.toggle('best',per[1]<per[0]);$('r_cost').hidden=false;
+      const w=rr.winner,lo=per[w]<per[1-w],x=Math.max(per[0],per[1])/Math.min(per[0],per[1]);
+      if(lo&&x>=1.5){$('cheaper').innerHTML=`${NAMES[w]} won at <b>${x.toFixed(x<10?0:0)}×</b> lower cost per decision.`;$('cheaper').hidden=false}
+    }
+    const same=j.matches.filter(m=>m.archived&&m.result&&!m.mock&&m.players&&m.players.join()===NAMES.join());
+    if(same.length<2)return;
+    const wins=[0,1].map(i=>same.filter(m=>m.result.winner===i).length);
+    $('series').innerHTML=`Across ${same.length} recorded matches: <b class="j">${NAMES[0]} ${wins[0]}</b>, <b class="o">${NAMES[1]} ${wins[1]}</b>`;
+    $('series').hidden=false}).catch(()=>{});
   $('result').classList.add('show');
 }
 
@@ -390,17 +461,17 @@ let view=null,elapsed=0,clock=0,paused=QS.has('pause'),overAt=null,resultFor=nul
 const EMPTY={t:0,dur:60,over:false,units:[],towers:[[0,'L',4,22.5],[0,'R',14,22.5],[0,'K',9,25.6],[1,'L',4,5.5],[1,'R',14,5.5],[1,'K',9,2.4]]
   .map(([side,kind,x,y])=>({side,kind,x,y,hp:kind==='K'?6000:3800,max:kind==='K'?6000:3800,alive:true,aim:null,hit:-9})),shots:[],fx:[],
   sides:[0,1].map(()=>({elixir:5,wasted:0,decisions:0,crowns:0,thinking_since:null,last:null,avg:null,recent:[],ghosts:null}))};
-function newMatch(key){matchKey=key;overAt=null;resultFor=null;resetCaptions();for(const k in cache)delete cache[k];for(const k in FACE)delete FACE[k];$('result').classList.remove('show')}
+function newMatch(key){for(const k in TRAIL)delete TRAIL[k];matchKey=key;bannerStart=elapsed;overAt=null;resultFor=null;resetCaptions();for(const k in cache)delete cache[k];for(const k in FACE)delete FACE[k];$('result').classList.remove('show')}
 
 // demo: the engine runs here
 let sim=null,acc=0;
-function demoRestart(){sim=new window.DemoSim({seed:14,duration:40});acc=0;elapsed=0;newMatch('demo'+performance.now());$('intro').classList.add('show');
-  if(AT){while(sim.t<AT&&!sim.over)sim.step(1/60);elapsed=INTRO+1e-3}}
+function demoRestart(){sim=new window.DemoSim({seed:14,duration:40});acc=0;elapsed=0;newMatch('demo'+performance.now());$('intro').classList.remove('show');
+  if(AT){while(sim.t<AT&&!sim.over)sim.step(1/60);elapsed=INTRO+1e-3;bannerStart=-99}}
 function demoView(dt){if(elapsed>INTRO){$('intro').classList.remove('show');acc+=dt;while(acc>=1/60&&!sim.over){sim.step(1/60);acc-=1/60}}return sim.frame()}
 
 // replay: recorded frames on their own clock, after the intro card
 let rframes=null;
-function replayRestart(){elapsed=AT?INTRO+AT:0;newMatch('replay'+performance.now());$('intro').classList.add('show')}
+function replayRestart(){elapsed=AT?INTRO+AT:0;newMatch('replay'+performance.now());if(AT)bannerStart=-99;$('intro').classList.remove('show')}
 function replayView(){
   if(!rframes)return null;const t=elapsed-INTRO;
   if(t<0)return rframes[0];$('intro').classList.remove('show');
@@ -412,22 +483,38 @@ function replayView(){
 let fa=null,fb=null,fbAt=0,gap=50;
 function liveView(now){return fb?lerpFrame(fa,fb,(now-fbAt)/gap):null}
 function onLiveFrame(f,id,now){
-  if(id!==matchKey){newMatch(id);fa=null}
+  if(id!==matchKey){newMatch(id);fa=null;if(f.t>0.5)bannerStart=-99}  // joined mid-match: no banner
   if(fb&&f.t<fb.t)fa=null;
   fa=fb&&f.t>=fb.t?fb:null;if(fa)gap=Math.max(16,Math.min(200,now-fbAt));fb=f;fbAt=now;
   if(!f.over)$('intro').classList.remove('show');
 }
 
 /* ---------- loop ---------- */
-function loop(now){
-  const dt=paused?0:Math.min(0.1,(now-last)/1000);last=now;elapsed+=dt;clock+=dt;
+function tick(dt,now){
+  elapsed+=dt;clock+=dt;
   view=MODE==='demo'?demoView(dt):MODE==='replay'?replayView():liveView(now);
   const S=view||EMPTY;
   if(S.over&&overAt==null)overAt=elapsed;
   if(S.over&&S.result&&overAt!=null&&elapsed-overAt>OUTRO_DELAY&&resultFor!==matchKey){resultFor=matchKey;showResult(S.result,S.dur,S.t)}
-  draw(S,clock);hud(S);if(view)captions(S,elapsed);
+  draw(S,clock);hud(S);if(view)captions(S,elapsed);banner(view);
+}
+// Start-of-match banner: the two halves slam in from the sides, hold, then fade as the first troops land.
+// Driven by match time, so it plays the same live, in replays and in recordings.
+function banner(S){
+  const el=$('banner'),t=elapsed-bannerStart,show=!!S&&!S.over&&t>=0&&t<BANNER_HOLD+0.45;
+  if(el.hidden!==!show)el.hidden=!show;if(!show)return;
+  const p=Math.min(1,t/0.35),ease=1-Math.pow(1-p,3),slide=(1-ease)*620;
+  $('bh1').style.transform=`translateX(${-slide}px)`;$('bh0').style.transform=`translateX(${slide}px)`;
+  const pop=t<0.35?0:Math.min(1,(t-0.35)/0.15);$('banner').querySelector('.bvs').style.transform=`translate(-50%,-50%) scale(${0.4+0.6*pop})`;
+  el.style.opacity=t<BANNER_HOLD?1:Math.max(0,1-(t-BANNER_HOLD)/0.4);
+}
+function loop(now){
+  const dt=paused?0:Math.min(0.1,(now-last)/1000);last=now;tick(dt,now);
   requestAnimationFrame(loop);
 }
+// For tools/record.py: step(dt) renders the next frame and says how far along the video is.
+window.arenaRecord={ready:false,step(dt){tick(dt,performance.now());
+  return{t:elapsed,ended:resultFor===matchKey,afterEnd:resultFor===matchKey?elapsed-overAt-OUTRO_DELAY:0}}};
 
 /* ---------- controls ---------- */
 function startMatch(){
@@ -453,7 +540,7 @@ $('bReplay').hidden=$('bPause').hidden=!playback;if(paused)$('bPause').textConte
 if(!playback)$('hint').textContent='C toggles clean frame. For a 1080×1920 capture, size the window to 9:16 and use Clean frame. To record a finished match, open it with ?replay=<id>.';
 
 if(MODE==='demo'){
-  setLabels(false);introLatency(0.35,6);$('introNote').textContent='Simulation: no model is called.';demoRestart();
+  setLabels(false);introLatency(0.35,6);$('introNote').textContent='Simulation: no model is called.';demoRestart();window.arenaRecord.ready=true;
 }else{
   fetch('api/config',{cache:'no-store',headers:AUTH}).then(r=>r.json()).then(c=>{
     CONFIG=c;setPlayers(c.players);setLabels(c.mock);
@@ -463,8 +550,11 @@ if(MODE==='demo'){
         fetch('api/matches').then(r=>r.json())]).then(([t,list])=>{
         rframes=t.trim().split('\n').map(l=>JSON.parse(l));
         const m=list.matches.find(m=>m.id===id)||{};setLabels(!!m.mock);
+        // A capped match says so on screen: the cap holds back the fast side only, which makes the result fairer.
+        const gap=m.config&&m.config.min_interval;
+        if(gap&&!m.mock)$('tagline').textContent='Real model calls. Each side: at most one decision every '+(gap===1?'second':gap+'s')+'.';
         const res=rframes[rframes.length-1].result;if(res)introLatency(res.sides[0].avg_decision_s,res.sides[1].avg_decision_s);
-        $('introNote').textContent='Replay of match '+id+'.';replayRestart();
+        $('introNote').textContent=RECORD?'':'Replay of match '+id+'.';replayRestart();window.arenaRecord.ready=true;
       }).catch(e=>{$('introNote').textContent='Replay unavailable: '+e.message});
     }else{
       $('bStart').hidden=$('bStartIntro').hidden=!c.can_start;
@@ -475,5 +565,5 @@ if(MODE==='demo'){
     }
   }).catch(()=>{$('introNote').textContent='The arena service is not reachable.'});
 }
-requestAnimationFrame(loop);
+if(!RECORD)requestAnimationFrame(loop);
 })();

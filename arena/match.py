@@ -9,6 +9,7 @@ for replay; decisions and the result go to ``logs/<id>.jsonl``.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import time
 from datetime import datetime, timezone
@@ -54,8 +55,10 @@ class MatchRunner:
                                  min_interval=self.settings.DECISION_MIN_INTERVAL))
         self.calls, self.cost = [0, 0], [0.0, 0.0]
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        # Everything tools/rerun.py needs to replay the match through the engine without the models.
+        config = {**dataclasses.asdict(self.sim.cfg), "tick_hz": self.settings.TICK_HZ, "frame_hz": self.settings.FRAME_HZ}
         self._log({"event": "start", "players": self.players.roster, "duration": self.sim.cfg.duration,
-                   "mock": self.settings.is_mock})
+                   "mock": self.settings.is_mock, "config": config})
         self._task = asyncio.create_task(self._run(self.sim, self.match_id))
         logger.info("match {} started", self.match_id)
         return self.match_id
@@ -100,8 +103,13 @@ class MatchRunner:
         frame_every = 1 / self.settings.FRAME_HZ
         frames = (self.log_dir / f"{match_id}.frames.jsonl").open("w")
         loop = asyncio.get_running_loop()
-        start = last_frame = loop.time()
         try:
+            # Pre-roll: the starting board, frozen, while viewers show the start banner.
+            ready_at = loop.time() + self.settings.MATCH_PREROLL_SECONDS
+            while loop.time() < ready_at:
+                self._broadcast({**sim.frame(), "preroll": True})
+                await asyncio.sleep(frame_every)
+            start = last_frame = loop.time()
             while not sim.over:
                 # Catch the engine up to wall time, in fixed steps.
                 target = loop.time() - start
@@ -146,15 +154,15 @@ class MatchRunner:
         except (OpenRouterError, InvalidMove) as exc:
             ms = (time.perf_counter() - t0) * 1000
             fresh = sim.resolve(req.side, req.id, error=str(exc))
-            self._log({"event": "decision", "player": who, "request": req.id, "asked_at": req.asked_at, "ms": ms,
-                       "snapshot": req.snapshot, "error": str(exc), "applied": fresh}, match_id)
+            self._log({"event": "decision", "player": who, "side": req.side, "request": req.id, "asked_at": req.asked_at,
+                       "answered_at": sim.t, "ms": ms, "snapshot": req.snapshot, "error": str(exc), "applied": fresh}, match_id)
             return
         self.cost[req.side] += float((move.usage or {}).get("cost") or 0)
         fresh = sim.resolve(req.side, req.id, card=move.card, lane=move.lane, model_ms=move.ms)
-        self._log({"event": "decision", "player": who, "request": req.id, "asked_at": req.asked_at,
+        self._log({"event": "decision", "player": who, "side": req.side, "request": req.id, "asked_at": req.asked_at,
                    "answered_at": sim.t, "ms": move.ms, "card": move.card, "lane": move.lane,
                    "confidence": move.confidence, "model": move.model, "usage": move.usage,
-                   "snapshot": req.snapshot, "sent": move.request, "applied": fresh}, match_id)
+                   "snapshot": req.snapshot, "sent": move.request, "received": move.answer, "applied": fresh}, match_id)
 
     def _log(self, entry: Dict[str, Any], match_id: Optional[str] = None) -> None:
         mid = match_id or self.match_id
@@ -164,16 +172,25 @@ class MatchRunner:
     # ── history ─────────────────────────────────────────────────────
     def matches(self) -> List[Dict[str, Any]]:
         out = []
-        for p in sorted(self.log_dir.glob("*.jsonl"), reverse=True):
+        archive = Path(self.settings.MATCH_ARCHIVE_DIR)
+        paths = sorted([*self.log_dir.glob("*.jsonl"), *(archive.glob("*.jsonl") if archive.is_dir() else [])],
+                       key=lambda p: p.name, reverse=True)
+        seen = set()
+        for p in paths:
+            if p.stem in seen:
+                continue
+            seen.add(p.stem)
             if p.name.endswith(".frames.jsonl"):
                 continue
-            result, mock = None, None
+            result, mock, config, players = None, None, None, None
             for line in p.read_text().splitlines():
                 e = json.loads(line)
                 if e.get("event") == "start":
-                    mock = e.get("mock")
+                    mock, config = e.get("mock"), e.get("config")
+                    players = [p.get("name") for p in e.get("players", [])]
                 elif e.get("event") == "result":
                     result = e["result"]
-            out.append({"id": p.stem, "mock": mock, "result": result,
-                        "replay": (self.log_dir / f"{p.stem}.frames.jsonl").exists()})
+            out.append({"id": p.stem, "mock": mock, "result": result, "config": config, "players": players,
+                        "archived": (archive / p.name).exists(),
+                        "replay": (p.parent / f"{p.stem}.frames.jsonl").exists()})
         return out

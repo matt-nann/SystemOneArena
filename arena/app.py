@@ -79,8 +79,11 @@ def build_app(settings: Settings, runner: MatchRunner, *, lifespan: Any = None) 
 
     @app.get("/api/matches/{match_id}/frames")
     async def frames(match_id: str) -> FileResponse:
-        path = Path(settings.LOG_DIR) / f"{match_id}.frames.jsonl"
-        if not re.fullmatch(r"[\w-]{1,64}", match_id) or not path.exists():
+        if not re.fullmatch(r"[\w-]{1,64}", match_id):
+            raise HTTPException(404, "no such match")
+        path = next((d / f"{match_id}.frames.jsonl" for d in (Path(settings.LOG_DIR), Path(settings.MATCH_ARCHIVE_DIR))
+                     if (d / f"{match_id}.frames.jsonl").exists()), None)
+        if path is None:
             raise HTTPException(404, "no such match")
         return FileResponse(path, media_type="application/x-ndjson")
 

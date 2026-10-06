@@ -108,8 +108,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .banner{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);display:grid;gap:14px;justify-items:center;pointer-events:none}
 .bk{font-family:var(--mono);font-weight:800;font-size:26px;letter-spacing:.14em;text-transform:uppercase;color:var(--outline);
   background:var(--gold);padding:8px 18px 6px;border-radius:10px;border:4px solid var(--outline);box-shadow:0 5px 0 var(--outline)}
-.bv{position:relative;width:100%;display:grid;grid-template-columns:1fr 1fr;border-block:6px solid var(--outline);box-shadow:0 8px 0 rgba(18,15,36,.5)}
-.bh{display:grid;justify-items:center;gap:2px;padding:22px 10px 20px}
+.bv{position:relative;width:100%;display:grid;grid-template-columns:1fr 1fr}
+/* each half carries its own outline, so the borders slide in with the names */
+.bh{display:grid;justify-items:center;gap:2px;padding:22px 10px 20px;border-block:6px solid var(--outline);box-shadow:0 8px 0 rgba(18,15,36,.5)}
 .bsol{background:linear-gradient(180deg,var(--sol),var(--sol-deep))}
 .bjev{background:linear-gradient(180deg,var(--jev),var(--jev-deep))}
 .bn{font-family:var(--display);font-size:118px;line-height:.95;color:#fff;

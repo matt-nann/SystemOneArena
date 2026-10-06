@@ -16,8 +16,10 @@ const ADMIN=QS.get('admin'),AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
 // Replays and the demo go straight into the match: the first caption names the two models instead of an opening card.
 // The start banner holds over a frozen board for BANNER_HOLD seconds, then the clock starts. Live, the server's
 // pre-roll (MATCH_PREROLL_SECONDS) freezes the board; in replays and the demo the viewer holds the first frame.
-const BANNER_HOLD=1.5,INTRO=MODE==='live'?0:BANNER_HOLD,OUTRO_DELAY=1.4;
-let bannerStart=-99;
+// Start banner: 0-2s over a frozen board (the pre-roll), the match starts at 2s underneath it, and it fades out
+// from 3.6s to 4s, when the clock appears.
+const BANNER_HOLD=2,BANNER_OFF=4,INTRO=MODE==='live'?0:BANNER_HOLD,OUTRO_DELAY=1.4;
+let bannerStart=-99,bannerWall=0;
 let LAT=null;  // each side's average decision time, when known before the match plays (replay, demo)
 // ?at=<seconds> starts a demo or replay that far into the match (skipping the opening card); ?pause starts it paused.
 const AT=Math.max(0,parseFloat(QS.get('at'))||0);
@@ -99,7 +101,7 @@ function paintLand(){
   // decorations away from the lanes
   const dec=(n,x,y,k)=>{const d=img('decor/'+n);if(ready(d))g.drawImage(d,0,0,d.width,d.height,OX+x*U-d.width*P*k/2,y*U-d.height*P*k,d.width*P*k,d.height*P*k)};
   for(const[n,x,y]of[['04',1.6,11.6],['07',16.6,11.7],['08',2.0,16.8],['09',15.9,17.2],['10',7.1,9.4],['11',11.2,19.0],['05',12.2,8.8],['04',6.4,19.6]])dec(n,x,y,1);
-  ctx.save();const m=ctx;ctx=g;ctx.globalAlpha=0.42;label(NAMES[1].toUpperCase(),OX+9*U,10*U,3.3*U,TC[1].l,0.4*U);label(NAMES[0].toUpperCase(),OX+9*U,18*U,3.3*U,TC[0].l,0.4*U);ctx=m;ctx.restore();
+  // (no names on the grass: the start banner introduces the two sides)
 }
 /* Ground texture, drawn once at 32 texels per board tile (2 Tiny Swords pixels each) so it matches the sprites'
    pixel scale. Grass: soft patches, tufts with light tips, a few flowers. Lanes: sand with speckles and pebbles,
@@ -261,8 +263,9 @@ function draw(S,clock){
   ctx.setTransform(1,0,0,1,OX,0);
   drawWater(clock);ctx.drawImage(land,-OX,0);drawBridges();
   const left=Math.max(0,Math.ceil(S.dur-S.t));
-  rr(7.1*U,(RIVER-0.85)*U,3.8*U,1.7*U,0.85*U);fs('#1b1830',OL,0.12*U);
-  label(Math.floor(left/60)+':'+String(left%60).padStart(2,'0'),9*U,(RIVER+0.06)*U,1.1*U,'#fff',0.2*U);
+  // the clock appears once the start banner has gone
+  if(!bannerUp()){rr(7.1*U,(RIVER-0.85)*U,3.8*U,1.7*U,0.85*U);fs('#1b1830',OL,0.12*U);
+  label(Math.floor(left/60)+':'+String(left%60).padStart(2,'0'),9*U,(RIVER+0.06)*U,1.1*U,'#fff',0.2*U);}
 
   drawEdgeDecor(clock);
   const things=[];for(const t of S.towers)things.push({y:t.y+(t.kind==='K'?1.4:1.0),t});for(const u of S.units)things.push({y:u.y+0.45,u});
@@ -453,7 +456,7 @@ let view=null,elapsed=0,clock=0,paused=QS.has('pause'),overAt=null,resultFor=nul
 const EMPTY={t:0,dur:60,over:false,units:[],towers:[[0,'L',4,22.5],[0,'R',14,22.5],[0,'K',9,25.6],[1,'L',4,5.5],[1,'R',14,5.5],[1,'K',9,2.4]]
   .map(([side,kind,x,y])=>({side,kind,x,y,hp:kind==='K'?6000:3800,max:kind==='K'?6000:3800,alive:true,aim:null,hit:-9})),shots:[],fx:[],
   sides:[0,1].map(()=>({elixir:5,wasted:0,decisions:0,crowns:0,thinking_since:null,last:null,avg:null,recent:[],ghosts:null}))};
-function newMatch(key){for(const k in TRAIL)delete TRAIL[k];matchKey=key;bannerStart=elapsed;overAt=null;resultFor=null;resetCaptions();for(const k in cache)delete cache[k];for(const k in FACE)delete FACE[k];$('result').classList.remove('show')}
+function newMatch(key){for(const k in TRAIL)delete TRAIL[k];matchKey=key;bannerStart=elapsed;bannerWall=performance.now();overAt=null;resultFor=null;resetCaptions();for(const k in cache)delete cache[k];for(const k in FACE)delete FACE[k];$('result').classList.remove('show')}
 
 // demo: the engine runs here
 let sim=null,acc=0;
@@ -492,13 +495,19 @@ function tick(dt,now){
 }
 // Start-of-match banner: the two halves slam in from the sides, hold, then fade as the first troops land.
 // Driven by match time, so it plays the same live, in replays and in recordings.
+// Seconds since the match began. Live, from the wall clock (a background tab pauses animation frames, which would
+// otherwise bring the banner back mid-match); in replays and recordings, from the stepped playback clock.
+function bannerTime(){return bannerStart<0?-1:MODE==='live'?(performance.now()-bannerWall)/1000:elapsed-bannerStart}
+function bannerUp(){const t=bannerTime();return !!view&&!view.over&&t>=0&&t<BANNER_OFF}
 function banner(S){
-  const el=$('banner'),t=elapsed-bannerStart,show=!!S&&!S.over&&t>=0&&t<BANNER_HOLD+0.45;
+  const el=$('banner'),t=bannerTime(),show=bannerUp();
   if(el.hidden!==!show)el.hidden=!show;if(!show)return;
   const p=Math.min(1,t/0.35),ease=1-Math.pow(1-p,3),slide=(1-ease)*620;
   $('bh1').style.transform=`translateX(${-slide}px)`;$('bh0').style.transform=`translateX(${slide}px)`;
-  const pop=t<0.35?0:Math.min(1,(t-0.35)/0.15);$('banner').querySelector('.bvs').style.transform=`translate(-50%,-50%) scale(${0.4+0.6*pop})`;
-  el.style.opacity=t<BANNER_HOLD?1:Math.max(0,1-(t-BANNER_HOLD)/0.4);
+  const pop=t<0.35?0:Math.min(1,(t-0.35)/0.15),vs=$('banner').querySelector('.bvs');
+  vs.style.transform=`translate(-50%,-50%) scale(${0.4+0.6*pop})`;vs.style.opacity=pop;
+  $('banner').querySelector('.bk').style.opacity=Math.min(1,t/0.35);
+  el.style.opacity=t<BANNER_OFF-0.4?1:Math.max(0,(BANNER_OFF-t)/0.4);
 }
 function loop(now){
   const dt=paused?0:Math.min(0.1,(now-last)/1000);last=now;tick(dt,now);

@@ -66,8 +66,8 @@ def test_frame_has_what_the_viewer_draws():
     json.dumps(f)
 
 
-def test_frame_carries_the_decision_rail_and_the_board_being_answered():
-    sim, due, seen_ghosts = Sim(SimConfig(duration=12)), [], False
+def test_frame_carries_the_decision_rail():
+    sim, due = Sim(SimConfig(duration=12)), []
     while not sim.over:
         sim.step(1 / 30)
         due += [(sim.t + [0.36, 5.99][r.side], r) for r in sim.take_requests()]
@@ -78,12 +78,9 @@ def test_frame_carries_the_decision_rail_and_the_board_being_answered():
             c, l = game.to_move(r.snapshot, card, lane)
             sim.resolve(r.side, r.id, card=c, lane=l)
         f = sim.frame()
-        sol = f["sides"][1]
-        if sol["thinking_since"] is not None:
-            seen_ghosts |= sol["ghosts"] is not None
         assert all(f["t"] - d["a"] <= 10.5 for s in f["sides"] for d in s["recent"])
     jev = sim.frame()["sides"][0]
-    assert seen_ghosts and jev["recent"] and jev["avg"] < 1
+    assert jev["recent"] and jev["avg"] < 1
     assert all("lat" in fx for fx in sim.fx if fx["kind"] == "deploy")
 
 

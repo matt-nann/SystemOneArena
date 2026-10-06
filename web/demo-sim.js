@@ -65,8 +65,7 @@ class Sim{
   ask(s){const S=this.sides[s];
     if(!this.affordable(s).length){S.pending={auto:true,start:this.t,due:this.t+IDLE_RECHECK};return}
     const[card,lane]=playbook(this.state(s),this.affordable(s));
-    S.pending={start:this.t,due:this.t+this.latency(s),ctx:[this.laneCtx(s,0),this.laneCtx(s,1)],card,lane,
-      ghosts:this.units.map(u=>({id:u.id,type:u.type,side:u.side,x:u.x,y:u.y,dir:u.dir}))}}
+    S.pending={start:this.t,due:this.t+this.latency(s),ctx:[this.laneCtx(s,0),this.laneCtx(s,1)],card,lane}}
   apply(i){const S=this.sides[i],p=S.pending;S.pending=null;if(p.auto)return;
     const lat=this.t-p.start;let card=p.card,late=false;const ctx=p.ctx[p.lane];
     if(card&&!(S.hand.includes(card)&&CARDS[card].cost<=S.elixir))card=null;
@@ -126,7 +125,7 @@ Sim.prototype.frame=function(){
     const r6=s.lats.slice(-6);
     return{elixir:s.elixir,wasted:s.wasted,decisions:s.decisions,crowns:s.crowns,errors:0,
       thinking_since:thinking?p.start:null,last:s.last?{card:s.last.card,why:s.last.card?'push':'wait',lat:s.last.lat}:null,last_error:null,
-      avg:r6.length?r6.reduce((a,b)=>a+b,0)/r6.length:null,recent:s.log.filter(d=>this.t-d.a<=10.5),ghosts:thinking?p.ghosts:null}});
+      avg:r6.length?r6.reduce((a,b)=>a+b,0)/r6.length:null,recent:s.log.filter(d=>this.t-d.a<=10.5)}});
   return{t:this.t,dur:this.cfg.duration,over:this.over,winner:this.winner,reason:this.reason||'',
     units:this.units.map(u=>({id:u.id,side:u.side,type:u.type,x:u.x,y:u.y,hp:u.hp,max:u.max,atk:u.atk,hit:u.hit,cd:u.cd,dir:u.dir,act:u.act})),
     towers:this.towers.map(t=>({side:t.side,kind:t.kind,x:t.x,y:t.y,hp:t.hp,max:t.max,alive:t.alive,aim:t.aim,hit:t.hit})),

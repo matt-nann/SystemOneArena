@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # How Sol is asked: "chat" (structured chat completion) or "decisions" (the Decisions endpoint,
     # like Jev). SOL_API=decisions with SOL_MODEL=typesafe/jev-1.13 plays Jev against Jev.
     SOL_API: str = "chat"
+    # Sol's label in the viewer. Empty picks one from SOL_API: "Fast decision model" or "Frontier model".
+    SOL_ROLE: str = ""
 
     # ── Match ────────────────────────────────────────────────────────
     MATCH_SECONDS: float = 60.0
@@ -44,6 +46,9 @@ class Settings(BaseSettings):
     # Engine ticks and frames streamed to viewers, per second.
     TICK_HZ: int = 30
     FRAME_HZ: int = 20
+    # Seconds the board is shown frozen at 0:00 before the clock starts, for the viewer's start banner.
+    # No model is asked anything until the clock starts, and these frames are not written to the replay.
+    MATCH_PREROLL_SECONDS: float = 1.5
     # Cost controls. A gap between one side's calls (0 asks again as soon as an answer lands),
     # and a cap on calls per match: when it is reached no more requests go out and the match ends.
     DECISION_MIN_INTERVAL: float = 0.0
@@ -54,6 +59,8 @@ class Settings(BaseSettings):
     # Set in any deployment: starting a match then needs `Authorization: Bearer <token>`.
     ARENA_ADMIN_TOKEN: str = ""
     LOG_DIR: Path = Path("logs")
+    # Matches committed to the repo (tools/archive.py): listed and replayable like the ones in LOG_DIR.
+    MATCH_ARCHIVE_DIR: Path = Path("matches")
     LOG_LEVEL: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

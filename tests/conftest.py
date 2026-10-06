@@ -27,7 +27,8 @@ def snap() -> Dict[str, Any]:
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(_env_file=None, OPENROUTER_API_KEY="or-key", LOG_DIR=tmp_path)
+    return Settings(_env_file=None, OPENROUTER_API_KEY="or-key", LOG_DIR=tmp_path, MATCH_ARCHIVE_DIR=tmp_path / "archive",
+                    MATCH_PREROLL_SECONDS=0)
 
 
 @pytest.fixture

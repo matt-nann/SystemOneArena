@@ -156,3 +156,26 @@ async def test_the_call_budget_stops_requests_and_ends_the_match(settings, mock_
     log = (settings.LOG_DIR / f"{runner.match_id}.jsonl").read_text()
     assert '"event": "budget"' in log and '"calls": [' in log
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_logged_match_reruns_to_the_same_result_without_models(settings, mock_app):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("rerun", "tools/rerun.py")
+    rerun = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rerun)
+    settings.DECISION_MIN_INTERVAL = 0.5
+    client = OpenRouterClient(settings, transport=transport(mock_app))
+    runner = MatchRunner(settings, Players(settings, client))
+    runner.start(duration=4)
+    await runner.wait()
+    events = [json.loads(line) for line in (settings.LOG_DIR / f"{runner.match_id}.jsonl").read_text().splitlines()]
+    start = events[0]
+    assert start["config"]["min_interval"] == 0.5 and start["config"]["tick_hz"] == settings.TICK_HZ
+    decided = [e for e in events if e["event"] == "decision" and not e.get("error")]
+    assert decided and all("received" in e and "side" in e for e in decided)
+    logged = next(e["result"] for e in events if e["event"] == "result")
+    got = rerun.rerun(events, {})
+    assert (got["winner"], got["seconds"]) == (logged["winner"], logged["seconds"])
+    assert [s["decisions"] for s in got["sides"]] == [s["decisions"] for s in logged["sides"]]
+    await client.aclose()

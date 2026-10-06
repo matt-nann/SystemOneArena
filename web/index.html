@@ -27,28 +27,30 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .holder{position:relative;flex:none}
 .frame{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0;overflow:hidden;
   background:radial-gradient(120% 60% at 50% 0%,#28307a 0%,transparent 60%),radial-gradient(120% 50% at 50% 100%,#1b3a8f 0%,transparent 60%),var(--ground);
-  display:grid;grid-template-rows:140px 1fr;gap:14px;padding:22px 34px 30px}
+  display:grid;grid-template-rows:180px 1fr;gap:14px;padding:22px 0 0}
 
 /* caption rail */
-.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.rail{display:flex;flex-direction:column;gap:12px;min-width:0;padding-inline:34px}
 .tagline{display:flex;align-items:center;gap:14px;font-size:24px;font-weight:600;color:var(--muted);letter-spacing:.01em}
 .badge{font-family:var(--mono);font-weight:800;font-size:19px;letter-spacing:.12em;color:var(--outline);background:var(--gold);padding:5px 12px 4px;border-radius:8px}
-.cap{margin:0;font-weight:800;font-size:46px;line-height:1.1;letter-spacing:-.01em;text-wrap:balance;transition:opacity .25s,transform .25s}
+.cap{margin:0;flex:1;min-height:0;overflow:hidden;font-weight:800;font-size:46px;line-height:1.1;letter-spacing:-.01em;text-wrap:balance;transition:opacity .25s,transform .25s}
 .cap.out{opacity:0;transform:translateY(8px)}
+.cap .big{display:block;font-family:var(--display);font-weight:400;font-size:1.65em;line-height:1;margin-bottom:6px;letter-spacing:0}
+.cap .big small{font-size:.5em;color:var(--muted);margin:0 .15em}
 .cap .s{color:var(--sol-soft)} .cap .j{color:var(--jev-soft)} .cap .n{font-family:var(--mono);font-weight:800;color:var(--think)}
 
 /* board: one unit, broadcast style. Sol's HUD, the arena and Jev's HUD share an outline and a width. Each HUD: name + speed chip, elixir + leaked, decision rail. */
-.board{justify-self:center;display:grid;grid-template-rows:auto 1fr auto;min-height:0;border:5px solid var(--outline);border-radius:30px;overflow:hidden;box-shadow:0 8px 0 var(--outline);background:var(--outline)}
-.hud{--side:var(--sol);--deep:var(--sol-deep);display:grid;grid-template-rows:64px 58px 54px;gap:10px;padding:14px 18px;min-width:0;
+.board{display:grid;grid-template-rows:auto 1fr auto;min-height:0;overflow:hidden;background:var(--outline)}
+.hud{--side:var(--sol);--deep:var(--sol-deep);display:grid;grid-template-rows:88px 58px 54px;gap:10px;padding:14px 18px;min-width:0;
   background:radial-gradient(90% 140% at 0% 0%,rgba(255,255,255,.16),transparent 55%),linear-gradient(180deg,var(--side),var(--deep));border-bottom:5px solid var(--outline)}
-.hud.jev{--side:var(--jev);--deep:var(--jev-deep);grid-template-rows:54px 58px 64px;border-bottom:0;border-top:5px solid var(--outline)}
+.hud.jev{--side:var(--jev);--deep:var(--jev-deep);grid-template-rows:54px 58px 88px;border-bottom:0;border-top:5px solid var(--outline)}
 .who{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}
 .idn{display:flex;align-items:center;gap:16px;min-width:0}
-.name{font-family:var(--display);font-size:58px;line-height:.9;padding-bottom:4px;
+.name{font-family:var(--display);font-size:86px;line-height:.9;padding-bottom:6px;
   text-shadow:-4px 0 var(--outline),4px 0 var(--outline),0 -4px var(--outline),0 5px var(--outline),-4px -4px var(--outline),4px -4px var(--outline),-4px 5px var(--outline),4px 5px var(--outline)}
 .meta{display:flex;flex-direction:column;gap:3px;min-width:0}
-.role{font-weight:800;font-size:23px;line-height:1.1;white-space:nowrap}
-.model{font-family:var(--mono);font-size:17px;color:rgba(255,255,255,.72);white-space:nowrap}
+.role{font-weight:800;font-size:27px;line-height:1.1;white-space:nowrap}
+.model{font-family:var(--mono);font-size:19px;color:rgba(255,255,255,.72);white-space:nowrap}
 .status{display:grid;justify-items:end;align-content:center;gap:2px;flex:none;min-width:210px;height:64px;padding:4px 16px;border-radius:16px;
   background:rgba(9,10,30,.42);box-shadow:inset 0 2px 0 rgba(0,0,0,.25)}
 .status .lbl{font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.72);line-height:1}
@@ -64,8 +66,11 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .drop svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .drop span{position:relative;padding-top:15px;line-height:1}
 .bar{position:relative;flex:1;height:36px;border:4px solid var(--outline);border-radius:12px;background:#2a1636;overflow:hidden;box-shadow:inset 0 3px 0 rgba(0,0,0,.35)}
-.bar .fill{position:absolute;inset:0 0 0 26px;transform-origin:left;transform:scaleX(.5);
+/* the fill starts under the drop and grows across the marked part of the bar (from 26px), so it flows out of the icon */
+.bar .fill{position:absolute;top:0;bottom:0;left:0;width:calc(26px + (100% - 26px) * var(--v,.5));border-radius:0 8px 8px 0;
   background:linear-gradient(180deg,#ffc2fd 0%,#ff6cf9 35%,var(--elixir) 60%,#c42fc2 100%)}
+.bar .charge{position:absolute;top:0;bottom:0;left:0;width:calc(26px + (100% - 26px) * var(--c,.5));border-radius:0 8px 8px 0;
+  background:linear-gradient(180deg,#ffc2fd 0%,#ff6cf9 35%,var(--elixir) 60%,#c42fc2 100%);opacity:.38}
 .bar .fill::after{content:"";position:absolute;left:0;right:0;top:4px;height:5px;border-radius:3px;background:rgba(255,255,255,.45);margin:0 6px}
 .bar .marks{position:absolute;inset:0 0 0 26px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 2px),rgba(18,15,36,.55) calc(10% - 2px),rgba(18,15,36,.55) 10%)}
 .bar.capped .fill{animation:cap .5s steps(2) infinite}
@@ -80,14 +85,14 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .leak{display:flex;align-items:center;gap:10px;flex:none}
 .leak .ll{font-family:var(--display);font-size:21px;line-height:.95;text-align:right;color:#fff;
   text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-.splash{position:relative;width:70px;height:62px;display:grid;place-items:center;--drop-fill:url(#elxGrey)}
-.splash svg{position:absolute;overflow:visible}
-.splash .dr{left:12px;top:0;width:46px;height:58px;filter:drop-shadow(0 3px 0 rgba(18,15,36,.45))}
-.splash .sp{inset:0;width:100%;height:100%;fill:#8a7899;stroke:var(--outline);stroke-width:2.4;opacity:.0;transition:opacity .3s}
-.splash b{position:relative;padding-top:16px;line-height:1;font-family:var(--display);font-weight:400;font-size:21px;color:#fff;font-variant-numeric:tabular-nums;
+/* elixir leaked: a splat of spilled elixir, grey until some is lost */
+.splash{position:relative;width:84px;height:66px;display:grid;place-items:center}
+.splash svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 3px 0 rgba(18,15,36,.45))}
+.splash svg *{fill:#8a7899;stroke:var(--outline);stroke-width:3;stroke-linejoin:round;transition:fill .3s}
+.splash b{position:relative;left:-4px;top:-2px;line-height:1;font-family:var(--display);font-weight:400;font-size:24px;color:#fff;font-variant-numeric:tabular-nums;
   text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-.leak.on .splash{--drop-fill:url(#elxBody)}
-.leak.on .splash .sp{opacity:1;fill:var(--elixir)}
+.leak.on .splash svg *{fill:var(--elixir)}
+.leak.on .splash svg path:first-child{fill:url(#elxBody)}
 .leak.bump .splash{animation:bump .25s ease-out}
 @keyframes bump{40%{transform:scale(1.12)}}
 .tl{font-size:14px;font-weight:700;color:rgba(255,255,255,.72);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
@@ -98,6 +103,19 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .count{font-family:var(--mono);font-weight:800;font-size:34px;font-variant-numeric:tabular-nums}
 
 .field{position:relative;min-height:0;overflow:hidden}
+/* start-of-match banner over the board; viewer.js moves it from match time, so it records frame-exact */
+.banner{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);display:grid;gap:14px;justify-items:center;pointer-events:none}
+.bk{font-family:var(--mono);font-weight:800;font-size:26px;letter-spacing:.14em;text-transform:uppercase;color:var(--outline);
+  background:var(--gold);padding:8px 18px 6px;border-radius:10px;border:4px solid var(--outline);box-shadow:0 5px 0 var(--outline)}
+.bv{position:relative;width:100%;display:grid;grid-template-columns:1fr 1fr;border-block:6px solid var(--outline);box-shadow:0 8px 0 rgba(18,15,36,.5)}
+.bh{display:grid;justify-items:center;gap:2px;padding:22px 10px 20px}
+.bsol{background:linear-gradient(180deg,var(--sol),var(--sol-deep))}
+.bjev{background:linear-gradient(180deg,var(--jev),var(--jev-deep))}
+.bn{font-family:var(--display);font-size:118px;line-height:.95;color:#fff;
+  text-shadow:-5px 0 var(--outline),5px 0 var(--outline),0 -5px var(--outline),0 7px var(--outline),-5px 7px var(--outline),5px 7px var(--outline)}
+.bl{font-family:var(--mono);font-weight:800;font-size:30px;color:#fff;text-shadow:0 3px 0 var(--outline)}
+.bvs{position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%);width:110px;height:110px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--display);font-size:54px;color:var(--outline);background:var(--gold);border:6px solid var(--outline);box-shadow:0 6px 0 var(--outline)}
 #cv{display:block}
 
 /* intro and result cards */
@@ -135,6 +153,11 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .cmp td.best{color:var(--gold)}
 .thesis{margin:24px 0 0;font-weight:800;font-size:72px;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
 .thesis em{font-style:normal;color:var(--gold)}
+.cheaper{margin:-8px 0 0;font-weight:800;font-size:44px;line-height:1.1}
+.cheaper b{color:var(--gold);font-family:var(--mono)}
+.series{margin:0;font-weight:700;font-size:40px;color:var(--muted)}
+.series b{font-family:var(--display);font-weight:400;font-size:52px}
+.series b.j{color:var(--jev-soft)} .series b.o{color:var(--sol-soft)}
 .byline{margin-top:auto;display:flex;flex-direction:column;gap:8px;border-top:2px solid var(--hair);padding-top:22px}
 .byline .me{font-size:34px;font-weight:800}
 .byline .repo{font-family:var(--mono);font-size:28px;color:var(--jev-soft)}
@@ -148,6 +171,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .controls .hint{flex-basis:100%;text-align:center;font-size:12.5px}
 body.clean .controls{display:none}
 body.clean .viewport{padding:0;gap:0}
+/* ?record: nothing but the frame, and no transitions, since time is stepped frame by frame */
+body.record #bAgain{display:none!important}
+body.record .frame *,body.record .frame{transition:none!important}
 @media (prefers-reduced-motion:reduce){.bar.capped .fill,.tank.capped .drips i,.leak.bump .splash{animation:none}.cap,.card{transition:none}}
 
 /* live-mode additions */
@@ -186,13 +212,22 @@ body.clean .viewport{padding:0;gap:0}
           <div class="idn"><div class="name" id="nm1">Sol</div><div class="meta"><span class="role" id="rl1">Frontier model</span><span class="model" id="md1">openai/gpt-6-sol</span></div></div>
           <div class="status" id="st1"><span class="lbl">ready</span><span class="num">0.0s</span></div>
         </div>
-        <div class="elx"><div class="tank" id="tk1"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex1">5</span></div><div class="bar" id="pp1"><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk1"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg class="sp" viewBox="0 0 70 58" aria-hidden="true"><circle cx="9" cy="40" r="3.4"/><circle cx="62" cy="44" r="3"/><circle cx="57" cy="14" r="2.4"/></svg><svg class="dr" aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><b>0.0</b></span></div></div>
+        <div class="elx"><div class="tank" id="tk1"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex1">5</span></div><div class="bar" id="pp1"><b class="charge"></b><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk1"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg viewBox="0 0 84 64" aria-hidden="true"><path d="M13 31C9 23 17 15 26 18C29 11 40 9 45 15C51 12 60 16 60 23C67 24 71 31 66 37C71 42 68 49 61 48C60 54 54 57 49 53C45 58 36 57 33 51C26 54 17 51 18 44C11 43 8 36 13 31Z"/><path d="M57 46C61 49 64 53 63 57C62 60 58 60 57 57C56 54 57 50 57 46Z"/><circle cx="73" cy="20" r="3.6"/><circle cx="79" cy="31" r="2.2"/><circle cx="72" cy="55" r="2.8"/><circle cx="7" cy="20" r="1.8"/></svg><b>0.0</b></span></div></div>
         <div class="tape"><canvas id="tp1" aria-hidden="true"></canvas><div class="tally"><span class="count" id="dc1">0</span><span class="tl">decisions</span></div></div>
         </section>
-        <div class="field" id="field"><canvas id="cv" role="img" aria-label="Arena: Sol's towers at the top, Jev's at the bottom"></canvas></div>
+        <div class="field" id="field"><canvas id="cv" role="img" aria-label="Arena: Sol's towers at the top, Jev's at the bottom"></canvas>
+          <div class="banner" id="banner" hidden aria-hidden="true">
+            <div class="bk">Real-time tower battle · the clock never stops</div>
+            <div class="bv">
+              <div class="bh bsol" id="bh1"><span class="bn" id="bn1">Luna</span><span class="bl" id="bl1"></span></div>
+              <div class="bvs">VS</div>
+              <div class="bh bjev" id="bh0"><span class="bn" id="bn0">Jev</span><span class="bl" id="bl0"></span></div>
+            </div>
+          </div>
+        </div>
         <section class="hud jev" aria-label="Jev">
         <div class="tape"><canvas id="tp0" aria-hidden="true"></canvas><div class="tally"><span class="count" id="dc0">0</span><span class="tl">decisions</span></div></div>
-        <div class="elx"><div class="tank" id="tk0"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex0">5</span></div><div class="bar" id="pp0"><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk0"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg class="sp" viewBox="0 0 70 58" aria-hidden="true"><circle cx="9" cy="40" r="3.4"/><circle cx="62" cy="44" r="3"/><circle cx="57" cy="14" r="2.4"/></svg><svg class="dr" aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><b>0.0</b></span></div></div>
+        <div class="elx"><div class="tank" id="tk0"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex0">5</span></div><div class="bar" id="pp0"><b class="charge"></b><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk0"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg viewBox="0 0 84 64" aria-hidden="true"><path d="M13 31C9 23 17 15 26 18C29 11 40 9 45 15C51 12 60 16 60 23C67 24 71 31 66 37C71 42 68 49 61 48C60 54 54 57 49 53C45 58 36 57 33 51C26 54 17 51 18 44C11 43 8 36 13 31Z"/><path d="M57 46C61 49 64 53 63 57C62 60 58 60 57 57C56 54 57 50 57 46Z"/><circle cx="73" cy="20" r="3.6"/><circle cx="79" cy="31" r="2.2"/><circle cx="72" cy="55" r="2.8"/><circle cx="7" cy="20" r="1.8"/></svg><b>0.0</b></span></div></div>
         <div class="who">
           <div class="idn"><div class="name" id="nm0">Jev</div><div class="meta"><span class="role" id="rl0">Fast decision model</span><span class="model" id="md0">typesafe/jev-1.13</span></div></div>
           <div class="status" id="st0"><span class="lbl">ready</span><span class="num">0.0s</span></div>
@@ -220,8 +255,11 @@ body.clean .viewport{padding:0;gap:0}
           <tr><td>Decisions made</td><td id="r_d0"></td><td id="r_d1"></td></tr>
           <tr><td>Troops never played</td><td id="r_w0"></td><td id="r_w1"></td></tr>
           <tr><td>Towers taken</td><td id="r_c0"></td><td id="r_c1"></td></tr>
+          <tr id="r_cost" hidden><td>Cost per 1,000 decisions</td><td id="r_k0"></td><td id="r_k1"></td></tr>
         </table>
-        <p class="thesis" id="thesis">When the world keeps moving, <em>a good answer now</em> beats a better answer in six seconds.</p>
+        <p class="thesis" id="thesis">In real time, <em>a late answer is a wrong answer.</em></p>
+        <p class="cheaper" id="cheaper" hidden></p>
+        <p class="series" id="series" hidden></p>
         <div class="byline">
           <span class="me">Built by Matt Nann</span>
           <span class="repo">github.com/matt-nann/SystemOneArena</span>

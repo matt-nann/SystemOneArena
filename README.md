@@ -5,7 +5,7 @@
 - **Jev**: TypeSafe's "System One" decision model (`typesafe/jev-1.13`), called through OpenRouter's Decisions endpoint.
 - **Sol**: an OpenRouter chat model (default `openai/gpt-6-sol`; set `SOL_MODEL`), called through chat completions with a strict JSON schema.
 
-The stack follows [Aven](https://github.com/matt-nann/aven): Python with uv, a FastAPI service shaped like `services/sandbox-service`, pydantic-settings, httpx and the openai SDK for OpenRouter (mirroring `packages/llm`), SSE via `StreamingResponse` (as in `brain-backend`), pytest + respx, and a Dockerfile + `railway.toml` for Railway.
+The stack follows [Aven](https://github.com/matt-nann/aven): Python with uv, a FastAPI service shaped like `services/sandbox-service`, pydantic-settings, httpx and the openai SDK for OpenRouter (mirroring `packages/llm`), SSE via `StreamingResponse` (as in `brain-backend`), pytest + respx, and a Dockerfile.
 
 ## Architecture
 
@@ -109,7 +109,7 @@ A match logs `"mock": true` whenever any OpenRouter URL is not openrouter.ai, an
 
 ## Deploy
 
-The service is one long-running process: it holds the match clock and the open SSE connections. That means it needs a container host, not serverless functions. It deploys to **Railway** the way Aven's services do: `railway.toml` builds the `Dockerfile` and health-checks `/health`. Keep one replica, because the match lives in that process's memory.
+The service is one long-running process: it holds the match clock and the open SSE connections. That means it needs a container host, not serverless functions. Any host that runs the `Dockerfile` works; point its health check at `/health`. Keep one replica, because the match lives in that process's memory.
 
 Set `OPENROUTER_API_KEY`, `SOL_MODEL` and `ARENA_ADMIN_TOKEN` in the service's variables. Logs go to `LOG_DIR` on the container's disk. Mount a volume there to keep matches and replays across deploys.
 

@@ -1,0 +1,5 @@
+Tiny Swords (Update 010) by Pixel Frog
+https://pixelfrog-assets.itch.io/tiny-swords
+
+Released under CC0 1.0 (public domain) as the download "TS_old version_CC0 Licensed".
+Copied here by tools/tinyswords.py. Credit is not required but is given gladly.

@@ -83,6 +83,8 @@ class Side:
     lats: List[float] = field(default_factory=list)
     model_ms: List[float] = field(default_factory=list)
     last_error: Optional[str] = None
+    # Recent answers as {s: asked at, a: applied at, c: card or None}, for the viewer's decision rail.
+    log: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _dist(a: Dict[str, Any], b: Dict[str, Any]) -> float:
@@ -187,7 +189,11 @@ class Sim:
             return
         self._rid += 1
         # Placement is fixed by the board at the moment of asking, so a slow answer is a late answer.
-        s.pending = {"id": self._rid, "start": self.t, "ctx": [self.lane_ctx(side, 0), self.lane_ctx(side, 1)], "ready": False}
+        # The troops as they stood when asked: the board a slow answer is still responding to.
+        ghosts = [{"id": u["id"], "side": u["side"], "type": u["type"], "x": round(u["x"], 2), "y": round(u["y"], 2), "dir": u["dir"]}
+                  for u in self.units]
+        s.pending = {"id": self._rid, "start": self.t, "ctx": [self.lane_ctx(side, 0), self.lane_ctx(side, 1)], "ready": False,
+                     "ghosts": ghosts}
         self.outbox.append(DecisionRequest(self._rid, side, self.t, self.snapshot(side)))
 
     def take_requests(self) -> List[DecisionRequest]:
@@ -232,9 +238,11 @@ class Sim:
             late = not any(uid in alive for uid in a["ids"])
             s.late += late
         if a["card"]:
-            self._deploy(i, a)
+            self._deploy(i, a, lat)
         s.decisions += 1
         s.lats.append(lat)
+        s.log.append({"s": round(p["start"], 2), "a": round(self.t, 2), "c": a["card"]})
+        del s.log[:-60]
         if p.get("model_ms") is not None:
             s.model_ms.append(p["model_ms"])
         s.last = {"card": a["card"], "lane": a["lane"], "why": a["why"], "lat": lat, "at": self.t, "late": late}
@@ -259,7 +267,7 @@ class Sim:
                 return lx, y
         return lx, RIVER - f * 1.8
 
-    def _deploy(self, side: int, a: Dict[str, Any]) -> None:
+    def _deploy(self, side: int, a: Dict[str, Any], lat: float = 0.0) -> None:
         me, c = self.sides[side], CARDS[a["card"]]
         me.elixir -= c["cost"]
         me.plays += 1
@@ -275,7 +283,7 @@ class Sim:
                                    hp=float(c["hp"]), max=c["hp"], cd=0.4, val=c["cost"] / n_units, hit=0.0,
                                    born=self.t, atk=None, dir="up" if side == 0 else "down", act="walk"))
             self._nid += 1
-        self.fx.append(dict(kind="deploy", side=side, type=a["card"], x=px, y=py, t=self.t, label=c["name"]))
+        self.fx.append(dict(kind="deploy", side=side, type=a["card"], x=px, y=py, t=self.t, label=c["name"], lat=lat))
 
     # ── the tick ────────────────────────────────────────────────────
     def step(self, dt: float) -> None:
@@ -436,6 +444,9 @@ class Sim:
                 "errors": s.errors, "thinking_since": r(s.pending["start"]) if thinking else None,
                 "last": {"card": s.last["card"], "why": s.last["why"], "lat": r(s.last["lat"])} if s.last else None,
                 "last_error": s.last_error,
+                "avg": r(sum(s.lats[-6:]) / len(s.lats[-6:])) if s.lats else None,
+                "recent": [d for d in s.log if self.t - d["a"] <= 10.5],
+                "ghosts": s.pending["ghosts"] if thinking else None,
             })
         return {
             "t": r(self.t), "dur": self.cfg.duration, "over": self.over, "winner": self.winner, "reason": self.reason,

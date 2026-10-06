@@ -66,6 +66,27 @@ def test_frame_has_what_the_viewer_draws():
     json.dumps(f)
 
 
+def test_frame_carries_the_decision_rail_and_the_board_being_answered():
+    sim, due, seen_ghosts = Sim(SimConfig(duration=12)), [], False
+    while not sim.over:
+        sim.step(1 / 30)
+        due += [(sim.t + [0.36, 5.99][r.side], r) for r in sim.take_requests()]
+        for item in [d for d in due if d[0] <= sim.t]:
+            due.remove(item)
+            r = item[1]
+            card, lane = playbook.play(game.state(r.snapshot), game.questions(r.snapshot)["card"]["options"])
+            c, l = game.to_move(r.snapshot, card, lane)
+            sim.resolve(r.side, r.id, card=c, lane=l)
+        f = sim.frame()
+        sol = f["sides"][1]
+        if sol["thinking_since"] is not None:
+            seen_ghosts |= sol["ghosts"] is not None
+        assert all(f["t"] - d["a"] <= 10.5 for s in f["sides"] for d in s["recent"])
+    jev = sim.frame()["sides"][0]
+    assert seen_ghosts and jev["recent"] and jev["avg"] < 1
+    assert all("lat" in fx for fx in sim.fx if fx["kind"] == "deploy")
+
+
 @pytest.mark.asyncio
 async def test_a_short_match_runs_end_to_end_on_the_mock(settings, mock_app):
     client = OpenRouterClient(settings, transport=transport(mock_app))

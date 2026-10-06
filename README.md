@@ -132,17 +132,18 @@ The same image runs the mock: start it with `python -m mock_openrouter`.
 
 `web/index.html` and `web/viewer.js` draw one vertical 1080×1920 frame, scaled to fit, built to be screen-recorded with the sound off:
 
-- **Captions** narrate the match in plain language from what happens in it ("Sol is still thinking. The match clock keeps running.").
-- **A panel per player**: name, model, the decision time (it turns yellow and counts up while a call is out), elixir with **elixir leaked**, and a 10-second decision rail. Each answer is a tick, a tick with a pink dot played a card, and the yellow bar is the call still out.
-- **On the board**: while a side is thinking, its troops' positions at the moment it was asked are drawn faded, with a dotted line to where each troop is now. That is the board the slow answer will be played against. Each deployed card shows its elixir cost and how long it took to decide.
-- **Opening and closing cards** name the two models, then show the winner, decision times, decisions made, troops never played (elixir leaked, in troops) and towers taken.
+- **A start banner** names the two sides with each model's speed. It holds over a frozen board for 2 seconds (the pre-roll), the match starts underneath it, and it clears at 4 seconds.
+- **Captions** narrate the match in plain language ("Sol is still thinking. The match clock keeps running.", "Tower down at 0:32. Jev leads 1–0.") and shrink to fit.
+- **A panel per player**: name, model, the decision time (yellow and counting up while a call is out), the elixir bar with the point still charging, elixir wasted, and a 10-second decision rail where each answer is a tick, a tick with a pink dot played a card, and the yellow bar is the call still out.
+- **On the board**: Tiny Swords units and buildings, Clash-style tower health bars with a damage trail, a thinking bubble beside a king whose model is still out, and each deployed card's elixir cost and decision time.
+- **An end card** with the winner, decision times, decisions made, troops never played, towers taken, cost per 1,000 decisions, and the record across archived matches between the same two models.
 
 It runs in three modes, with the same drawing code:
 
 | URL | Source |
 | --- | --- |
 | `/` | The live match, streamed over SSE |
-| `/?replay=<id>` | A recorded match, after a 3-second opening card. **Use this to record a video**: press C for a clean frame, R to restart, space to pause. Add `&at=<seconds>` to start partway through and `&pause` to start paused (also for `?demo`). |
+| `/?replay=<id>` | A recorded match, from its start banner. **Use this to record a video**: press C for a clean frame, R to restart, space to pause. Add `&at=<seconds>` to start partway through and `&pause` to start paused (also for `?demo`). |
 | `/?demo` | `web/demo-sim.js`, a browser port of the engine and playbook. Both sides run the same playbook with decision times sampled around 0.35 s and 6 s, so no server or model is needed. It is labelled as a simulation on screen. |
 
 ### Art

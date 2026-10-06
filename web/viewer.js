@@ -13,7 +13,6 @@ const $=id=>document.getElementById(id);
 const QS=new URLSearchParams(location.search);
 const MODE=(window.ARENA_DEMO||QS.has('demo'))?'demo':QS.get('replay')?'replay':'live';
 const ADMIN=QS.get('admin'),AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
-// Replays and the demo go straight into the match: the first caption names the two models instead of an opening card.
 // The start banner holds over a frozen board for BANNER_HOLD seconds, then the clock starts. Live, the server's
 // pre-roll (MATCH_PREROLL_SECONDS) freezes the board; in replays and the demo the viewer holds the first frame.
 // Start banner: 0-2s over a frozen board (the pre-roll), the match starts at 2s underneath it, and it fades out
@@ -21,7 +20,7 @@ const ADMIN=QS.get('admin'),AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
 const BANNER_HOLD=2,BANNER_OFF=4,INTRO=MODE==='live'?0:BANNER_HOLD,OUTRO_DELAY=1.4;
 let bannerStart=-99,bannerWall=0;
 let LAT=null;  // each side's average decision time, when known before the match plays (replay, demo)
-// ?at=<seconds> starts a demo or replay that far into the match (skipping the opening card); ?pause starts it paused.
+// ?at=<seconds> starts a demo or replay that far into the match (skipping the start banner); ?pause starts it paused.
 const AT=Math.max(0,parseFloat(QS.get('at'))||0);
 // ?record (with ?replay or ?demo): only the frame, at 1:1, and time advances only when tools/record.py calls
 // window.arenaRecord.step(dt), so every video frame is exactly 1/fps apart.
@@ -244,14 +243,14 @@ function towerBar(t,clock){
 /* troops */
 const FACE={};
 function facing(u){if(u.dir==='left')FACE[u.id]=-1;else if(u.dir==='right')FACE[u.id]=1;else if(FACE[u.id]==null)FACE[u.id]=u.side===0?1:-1;return FACE[u.id]}
-function troop(u,t,clock,alpha,ghost){
+function troop(u,t,clock,alpha){
   const A=UNIT[u.type],im=img(TEAM[u.side]+'/'+A.sheet),x=u.x*U,y=(u.y+0.45)*U,flip=facing(u)<0;
   let row,col;
   const age=u.atk==null?99:t-u.atk;
-  if(!ghost&&u.act==='attack'&&age<A.atkDur){const d=u.dir==='up'?'up':u.dir==='down'?'down':'right';[row]=A.atk[d];col=Math.floor(age/A.atkDur*A.atk[d][1])}
-  else if(!ghost&&u.act==='walk'){row=A.run[0];col=Math.floor(clock*10+u.id*1.7)%A.run[1]}
-  else{row=A.idle[0];col=ghost?0:Math.floor(clock*8+u.id)%A.idle[1]}
-  if(!ghost){const r=FOOT[u.type];E(x,y,r*1.15*U,r*0.42*U);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fill()}
+  if(u.act==='attack'&&age<A.atkDur){const d=u.dir==='up'?'up':u.dir==='down'?'down':'right';[row]=A.atk[d];col=Math.floor(age/A.atkDur*A.atk[d][1])}
+  else if(u.act==='walk'){row=A.run[0];col=Math.floor(clock*10+u.id*1.7)%A.run[1]}
+  else{row=A.idle[0];col=Math.floor(clock*8+u.id)%A.idle[1]}
+  const r=FOOT[u.type];E(x,y,r*1.15*U,r*0.42*U);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fill();
   const cw=A.cw||192;cell(im,cw,cw,col,row,A.ax,A.ay,x,y,A.scale,flip,alpha);
 }
 function troopBar(u){const A=UNIT[u.type],top=(u.y+0.45)*U-A.tall*P*A.scale-0.25*U;
@@ -455,7 +454,7 @@ function lerpFrame(a,b,k){
 let view=null,elapsed=0,clock=0,paused=QS.has('pause'),overAt=null,resultFor=null,matchKey=null,last=performance.now();
 const EMPTY={t:0,dur:60,over:false,units:[],towers:[[0,'L',4,22.5],[0,'R',14,22.5],[0,'K',9,25.6],[1,'L',4,5.5],[1,'R',14,5.5],[1,'K',9,2.4]]
   .map(([side,kind,x,y])=>({side,kind,x,y,hp:kind==='K'?6000:3800,max:kind==='K'?6000:3800,alive:true,aim:null,hit:-9})),shots:[],fx:[],
-  sides:[0,1].map(()=>({elixir:5,wasted:0,decisions:0,crowns:0,thinking_since:null,last:null,avg:null,recent:[],ghosts:null}))};
+  sides:[0,1].map(()=>({elixir:5,wasted:0,decisions:0,crowns:0,thinking_since:null,last:null,avg:null,recent:[]}))};
 function newMatch(key){for(const k in TRAIL)delete TRAIL[k];matchKey=key;bannerStart=elapsed;bannerWall=performance.now();overAt=null;resultFor=null;resetCaptions();for(const k in cache)delete cache[k];for(const k in FACE)delete FACE[k];$('result').classList.remove('show')}
 
 // demo: the engine runs here

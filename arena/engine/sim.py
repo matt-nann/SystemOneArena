@@ -199,11 +199,7 @@ class Sim:
         s.next_ask = self.t + self.cfg.min_interval
         self._rid += 1
         # Placement is fixed by the board at the moment of asking, so a slow answer is a late answer.
-        # The troops as they stood when asked: the board a slow answer is still responding to.
-        ghosts = [{"id": u["id"], "side": u["side"], "type": u["type"], "x": round(u["x"], 2), "y": round(u["y"], 2), "dir": u["dir"]}
-                  for u in self.units]
-        s.pending = {"id": self._rid, "start": self.t, "ctx": [self.lane_ctx(side, 0), self.lane_ctx(side, 1)], "ready": False,
-                     "ghosts": ghosts}
+        s.pending = {"id": self._rid, "start": self.t, "ctx": [self.lane_ctx(side, 0), self.lane_ctx(side, 1)], "ready": False}
         self.outbox.append(DecisionRequest(self._rid, side, self.t, self.snapshot(side)))
 
     def take_requests(self) -> List[DecisionRequest]:
@@ -459,7 +455,6 @@ class Sim:
                 "last_error": s.last_error,
                 "avg": r(sum(s.lats[-6:]) / len(s.lats[-6:])) if s.lats else None,
                 "recent": [d for d in s.log if self.t - d["a"] <= 10.5],
-                "ghosts": s.pending["ghosts"] if thinking else None,
             })
         return {
             "t": r(self.t), "dur": self.cfg.duration, "over": self.over, "winner": self.winner, "reason": self.reason,

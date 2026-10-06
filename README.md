@@ -33,6 +33,18 @@ uv run python -m arena                 # http://localhost:8000
 
 Open `http://localhost:8000` and press **Start match**. With `ARENA_ADMIN_TOKEN` set, only `http://localhost:8000/?admin=<token>` shows the button. Everyone else just watches.
 
+### With Docker (OrbStack)
+
+```sh
+docker compose up --build             # arena on :8000, mock OpenRouter on :8790
+```
+
+The arena calls the mock container over the compose network, so no key is needed. Match logs land in `./logs`. To play the real models, put `OPENROUTER_API_KEY` in `.env` and run:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.real.yml up --build arena
+```
+
 ## Mock OpenRouter
 
 `mock_openrouter/` stands in for OpenRouter itself. It serves the same paths and wire format (`POST /api/v1/chat/completions`, `POST /api/alpha/decisions`, `GET /api/v1/models`), so the real client code runs unchanged against it. It follows the pattern of Aven's `tests/stubs/llm`, scripted responses plus `/admin/*`, but speaks OpenRouter's format instead of Aven's internal one, and it also covers Decisions.

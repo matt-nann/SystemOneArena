@@ -3,6 +3,7 @@ name = "system-one-arena"
 version = "0.1.0"
 description = "Sol vs Jev in a server-authoritative real-time tower battle, every move an OpenRouter call."
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",

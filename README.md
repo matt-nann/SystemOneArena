@@ -196,3 +196,7 @@ The suite runs without network. It covers the frame fields the viewer draws (dec
 ## Credits
 
 Art: [Tiny Swords](https://pixelfrog-assets.itch.io/tiny-swords) by Pixel Frog (CC0). Inspired by Clash Royale; not affiliated with or endorsed by Supercell. Clash Royale is a trademark of Supercell Oy.
+
+## License
+
+MIT, see [`LICENSE`](LICENSE). The Tiny Swords art in `web/tinyswords/` is CC0 (see its `LICENSE.txt`).

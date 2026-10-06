@@ -1,0 +1,12 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["arena/**", "mock_openrouter/**", "web/**", "pyproject.toml", "uv.lock", "Dockerfile"]
+
+[deploy]
+numReplicas = 1  # one process owns the match; viewers all connect to it
+sleepApplication = false
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+healthcheckPath = "/health"
+healthcheckTimeout = 60

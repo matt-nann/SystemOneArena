@@ -1,0 +1,64 @@
+"""Every environment variable the arena reads (pydantic-settings, as in Aven).
+
+The OpenRouter names match Aven's ``packages/llm/config.py`` so one ``.env``
+works for both.
+"""
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    # ── OpenRouter (same names as Aven) ──────────────────────────────
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_DECISIONS_URL: str = "https://openrouter.ai/api/alpha/decisions"
+    OPENROUTER_APP_NAME: str = "System One Arena"
+    OPENROUTER_APP_URL: str = "https://github.com/matt-nann/SystemOneArena"
+
+    # Mock every OpenRouter request in-process (mock_openrouter, mounted as an
+    # httpx transport). No key needed, nothing leaves the machine.
+    OPENROUTER_MOCK: bool = False
+
+    # ── Players ──────────────────────────────────────────────────────
+    JEV_NAME: str = "Jev"
+    JEV_MODEL: str = "typesafe/jev-1.13"
+    JEV_TIMEOUT_SECONDS: float = 20.0
+    SOL_NAME: str = "Sol"
+    SOL_MODEL: str = "openai/gpt-6-sol"
+    # OpenRouter reasoning.effort (low / medium / high). Empty sends nothing.
+    SOL_REASONING_EFFORT: str = ""
+    SOL_MAX_TOKENS: int = 4000
+    SOL_TIMEOUT_SECONDS: float = 60.0
+
+    # ── Match ────────────────────────────────────────────────────────
+    MATCH_SECONDS: float = 60.0
+    MATCH_SEED: int = 13
+    # Engine ticks and frames streamed to viewers, per second.
+    TICK_HZ: int = 30
+    FRAME_HZ: int = 20
+
+    # ── Service ──────────────────────────────────────────────────────
+    PORT: int = 8000
+    # Set in any deployment: starting a match then needs `Authorization: Bearer <token>`.
+    ARENA_ADMIN_TOKEN: str = ""
+    LOG_DIR: Path = Path("logs")
+    LOG_LEVEL: str = "INFO"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def is_mock(self) -> bool:
+        """True unless every request goes to the real OpenRouter (in-process mock, or a URL pointed elsewhere)."""
+        real = "https://openrouter.ai/"
+        return self.OPENROUTER_MOCK or not (self.OPENROUTER_BASE_URL.startswith(real)
+                                            and self.OPENROUTER_DECISIONS_URL.startswith(real))
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

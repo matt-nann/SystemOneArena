@@ -1,7 +1,7 @@
 """HTTP surface. The service owns the game; browsers only watch.
 
     GET  /                       the viewer (web/index.html)
-    GET  /sprites/*              pixel-art atlas (tools/sprites.py)
+    GET  /static/*               viewer script, demo engine, Tiny Swords art (web/)
     GET  /health, /ready
     GET  /api/config             players, models, whether this viewer may start a match
     GET  /api/stream             SSE: one `frame` event per streamed frame (Aven's brain-backend pattern)
@@ -39,7 +39,7 @@ def build_app(settings: Settings, runner: MatchRunner, *, lifespan: Any = None) 
         token = settings.ARENA_ADMIN_TOKEN
         return not token or authorization == f"Bearer {token}"
 
-    app.mount("/sprites", StaticFiles(directory=WEB / "sprites"), name="sprites")
+    app.mount("/static", StaticFiles(directory=WEB), name="static")
 
     @app.get("/health")
     async def health() -> dict:

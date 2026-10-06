@@ -1,0 +1,435 @@
+/* System One Arena viewer.
+
+   Draws frames in the shape arena/engine/sim.py streams. Three sources feed it:
+     live    (default)    frames over SSE from /api/stream; the service runs the match
+     replay  (?replay=id) a recorded match's frames, played back on their own clock
+     demo    (?demo)      demo-sim.js runs the engine in the browser; no model is called
+   Nothing here changes a match except the Start buttons, which need the admin token
+   when one is set. Art: Tiny Swords (CC0) by Pixel Frog, in web/tinyswords. */
+(function(){
+'use strict';
+const W=18,H=28,RIVER=14,LANES=[4,14];
+const $=id=>document.getElementById(id);
+const QS=new URLSearchParams(location.search);
+const MODE=(window.ARENA_DEMO||QS.has('demo'))?'demo':QS.get('replay')?'replay':'live';
+const ADMIN=QS.get('admin'),AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
+const INTRO=3.2,OUTRO_DELAY=1.4;
+// ?at=<seconds> starts a demo or replay that far into the match (skipping the opening card); ?pause starts it paused.
+const AT=Math.max(0,parseFloat(QS.get('at'))||0);
+const ROLES=['Fast decision model','Frontier model'];
+let NAMES=['Jev','Sol'],CONFIG=null;
+
+/* ---------- 9:16 frame, scaled to fit ---------- */
+const frame=$('frame'),holder=$('holder');
+function fitFrame(){
+  const clean=document.body.classList.contains('clean');
+  const vw=innerWidth-(clean?0:32),vh=innerHeight-(clean?0:document.querySelector('.controls').offsetHeight+30);
+  const s=Math.max(0.1,Math.min(vw/1080,vh/1920));
+  frame.style.transform=`scale(${s})`;holder.style.width=1080*s+'px';holder.style.height=1920*s+'px';
+}
+addEventListener('resize',fitFrame);
+
+/* ---------- art ---------- */
+const ART='static/tinyswords/';
+const IMG={};
+function img(name){if(!IMG[name]){const i=new Image();i.src=ART+name+'.png';IMG[name]=i}return IMG[name]}
+const ready=i=>i.complete&&i.naturalWidth>0;
+const TEAM=['blue','red'];
+// Each card's sprite sheet: rows by animation, 192px cells; ax/ay is where the feet sit in a cell.
+const UNIT={
+  knight: {sheet:'warrior',ax:101,ay:136,scale:1.0,idle:[0,6],run:[1,6],atk:{right:[2,6],down:[4,6],up:[6,6]},atkDur:0.45,tall:92},
+  // The giant only hits buildings: a pawn at 2.2x that hammers the tower.
+  giant:  {sheet:'pawn',ax:96,ay:128,scale:2.2,idle:[0,6],run:[1,6],atk:{right:[2,6],down:[2,6],up:[2,6]},atkDur:0.6,tall:59},
+  archers:{sheet:'archer',ax:99,ay:134,scale:0.92,idle:[0,6],run:[1,6],atk:{right:[4,8],down:[6,8],up:[2,8]},atkDur:0.6,tall:76},
+  swarm:  {sheet:'torch',ax:90,ay:133,scale:0.72,idle:[0,7],run:[1,6],atk:{right:[2,6],down:[3,6],up:[4,6]},atkDur:0.4,tall:80},
+  bomber: {sheet:'tnt',ax:100,ay:135,scale:0.86,idle:[0,6],run:[1,6],atk:{right:[2,7],down:[2,7],up:[2,7]},atkDur:0.6,tall:68},
+};
+const CARD_COST={knight:3,archers:3,giant:5,swarm:2,bomber:3};
+const FOOT={knight:0.5,archers:0.4,swarm:0.32,giant:0.75,bomber:0.42};
+function preload(){for(const t of TEAM)for(const n of['warrior','archer','torch','tnt','pawn','tower','castle'])img(t+'/'+n);
+  for(const n of['ruins/tower','ruins/castle','fx/arrow','fx/dynamite','fx/dead','fx/explosion','fx/fire','terrain/water','terrain/foam','terrain/water_rocks','terrain/bridge','decor/tree','decor/sheep','decor/04','decor/05','decor/07','decor/08','decor/09','decor/10','decor/11'])img(n)}
+preload();
+
+/* ---------- arena canvas ---------- */
+const cv=$('cv');let ctx=cv.getContext('2d'),U=10,P=U/64;   // U: canvas px per board tile; P: canvas px per art px
+const land=document.createElement('canvas');
+const OL='#1d1a2b',GOLD='#ffcb45',TAU=Math.PI*2;
+const TC=[{m:'#3d8bff',d:'#1f5bcc',l:'#a9d0ff'},{m:'#f24a40',d:'#b3261f',l:'#ffb0a8'}];
+const DISPLAY='"Lilita One","Arial Rounded MT Bold","Arial Black",sans-serif',MONO='"JetBrains Mono",ui-monospace,Menlo,monospace';
+function sizeArena(){
+  // The arena keeps the board's 18:28 shape; its height decides the width of the whole board.
+  const h=$('field').clientHeight,w=Math.round(h*W/H);
+  $('board').style.width=(w+10)+'px';cv.style.width=w+'px';cv.style.height=h+'px';cv.width=w*2;cv.height=h*2;U=cv.width/W;P=U/64;paintLand();
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function C(x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,TAU)}
+function E(x,y,rx,ry){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,TAU)}
+function fs(f,s,lw){ctx.fillStyle=f;ctx.fill();if(s!==0){ctx.strokeStyle=s||OL;ctx.lineWidth=lw||0.13;ctx.stroke()}}
+function crown(cx,cy,q){ctx.beginPath();ctx.moveTo(cx-q,cy+q*.7);ctx.lineTo(cx-q,cy-q*.45);ctx.lineTo(cx-q*.45,cy+q*.1);ctx.lineTo(cx,cy-q*.8);ctx.lineTo(cx+q*.45,cy+q*.1);ctx.lineTo(cx+q,cy-q*.45);ctx.lineTo(cx+q,cy+q*.7);ctx.closePath()}
+function label(txt,x,y,px,fill,lw,font){ctx.font=`${px}px ${font||DISPLAY}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=lw||px*0.28;ctx.strokeStyle=OL;ctx.strokeText(txt,x,y);ctx.fillStyle=fill;ctx.fillText(txt,x,y)}
+// One cell of a sheet, feet (ax, ay) at canvas (x, y). k scales on top of P.
+function cell(im,cw,ch,col,row,ax,ay,x,y,k,flip,alpha){
+  if(!ready(im))return;
+  const s=P*(k||1);ctx.save();ctx.imageSmoothingEnabled=false;if(alpha!=null)ctx.globalAlpha*=alpha;
+  ctx.translate(Math.round(x),Math.round(y));if(flip)ctx.scale(-1,1);
+  ctx.drawImage(im,col*cw,row*ch,cw,ch,-ax*s,-ay*s,cw*s,ch*s);ctx.restore();
+}
+function strip(name,cw,ch,i,ax,ay,x,y,k,alpha){const im=img(name);if(!ready(im))return;const n=Math.floor(im.width/cw);cell(im,cw,ch,Math.max(0,Math.min(n-1,i)),0,ax,ay,x,y,k,false,alpha)}
+
+/* static ground: grass, sand lanes, the river banks' edge tiles, bridges, ground letters */
+function paintLand(){
+  land.width=cv.width;land.height=cv.height;const g=land.getContext('2d');g.imageSmoothingEnabled=false;
+  const T=U,top=(RIVER-1)*U,bot=(RIVER+1)*U;
+  // grass: a flat two-tone checker, tinted toward each side's colour, with a bank along the river
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const yy=y*U;if(yy+U>top&&yy<bot)continue;g.fillStyle=(x+y)%2?'#6cb346':'#63aa40';g.fillRect(x*U,yy,U+1,U+1)}
+  g.clearRect(0,top,land.width,bot-top);
+  g.fillStyle='rgba(242,74,64,.06)';g.fillRect(0,0,land.width,top);g.fillStyle='rgba(61,139,255,.07)';g.fillRect(0,bot,land.width,land.height-bot);
+  g.fillStyle='#4f8a34';g.fillRect(0,top-0.18*U,land.width,0.18*U);g.fillStyle='#3f7a2c';g.fillRect(0,bot,land.width,0.12*U);
+  // dirt lanes: a darker rim, then flat sand, over the union of the lane rects
+  const rects=[];const R=(x0,y0,x1,y1)=>rects.push([x0*U,y0*U,(x1-x0)*U,(y1-y0)*U]);
+  for(const lx of LANES){R(lx-0.8,5.5,lx+0.8,RIVER-1.05);R(lx-0.8,RIVER+1.05,lx+0.8,22.5)}
+  R(4,4.7,14,6.3);R(4,21.7,14,23.3);R(8.2,2.4,9.8,5.5);R(8.2,22.5,9.8,25.6);
+  g.fillStyle='#b39a5c';for(const[x,y,w,h]of rects)g.fillRect(x-0.14*U,y-0.14*U,w+0.28*U,h+0.28*U);
+  g.fillStyle='#dcc98f';for(const[x,y,w,h]of rects)g.fillRect(x,y,w,h);
+  // decorations away from the lanes
+  const dec=(n,x,y,k)=>{const d=img('decor/'+n);if(ready(d))g.drawImage(d,0,0,d.width,d.height,x*U-d.width*P*k/2,y*U-d.height*P*k,d.width*P*k,d.height*P*k)};
+  for(const[n,x,y]of[['04',1.6,11.6],['07',16.6,11.7],['08',2.0,16.8],['09',15.9,17.2],['10',7.1,9.4],['11',11.2,19.0],['05',12.2,8.8],['04',6.4,19.6]])dec(n,x,y,1);
+  ctx.save();const m=ctx;ctx=g;ctx.globalAlpha=0.3;label(NAMES[1].toUpperCase(),9*U,10*U,2.6*U,TC[1].l,0.35*U);label(NAMES[0].toUpperCase(),9*U,18*U,2.6*U,TC[0].l,0.35*U);ctx=m;ctx.restore();
+}
+function drawWater(clock){
+  const top=(RIVER-1.6)*U,h=3.2*U,wi=img('terrain/water');
+  ctx.fillStyle='#47aba9';ctx.fillRect(0,top,cv.width,h);
+  const fo=img('terrain/foam');
+  if(ready(fo)){const T=U,f0=Math.floor(clock*8);
+    for(const[edge,dy]of[[(RIVER-1)*U,-T],[(RIVER+1)*U,0]])for(let x=0,i=0;x<cv.width;x+=T,i++){
+      const f=(f0+i*3)%8;ctx.drawImage(fo,f*192,0,192,192,x+T/2-1.75*T,edge+dy+T/2-1.75*T,3.5*T,3.5*T)}}
+  const wr=img('terrain/water_rocks');
+  if(ready(wr))for(const[x,i]of[[1.3,0],[16.6,3]]){const f=(Math.floor(clock*6)+i)%8;ctx.drawImage(wr,f*128,0,128,128,(x-1)*U,(RIVER-1)*U,2*U,2*U)}
+}
+function drawBridges(){
+  const b=img('terrain/bridge');if(!ready(b))return;const k=1.35,T=64*P*k;
+  for(const lx of LANES){const x=lx*U-T/2,y0=(RIVER-1.5*k)*U;
+    ctx.drawImage(b,0,64,64,64,x,y0,T,T);ctx.drawImage(b,0,128,64,64,x,y0+T,T,T);ctx.drawImage(b,0,192,64,64,x,y0+2*T,T,T)}
+}
+function drawEdgeDecor(clock){
+  // trees along both sides, swaying; a sheep on each bank
+  const tr=img('decor/tree');
+  if(ready(tr))for(const[x,y,i]of[[-0.2,3.2,0],[18.1,6.4,1],[-0.4,9.0,2],[18.3,12.0,3],[-0.3,17.6,1],[18.2,20.4,2],[-0.2,24.8,3],[18.1,27.4,0]]){
+    const f=(Math.floor(clock*5)+i)%4;cell(tr,192,192,f,0,96,176,x*U,y*U,1.0)}
+  const sh=img('decor/sheep');
+  if(ready(sh))for(const[x,y,i]of[[16.4,3.2,0],[1.8,26.6,4]]){const f=(Math.floor(clock*6)+i)%8;cell(sh,128,128,f,0,64,86,x*U,y*U,0.9,i>0)}
+}
+
+/* buildings: princess towers and kings, an archer on each tower, ruins that burn */
+function towerShooting(S,t){return S.shots.some(s=>s.k==='ball'&&Math.abs(s.x1-t.x)<0.01&&Math.abs(s.y1-t.y)<0.01&&S.t-s.t<0.3)}
+function drawTower(S,t,clock){
+  const king=t.kind==='K',x=t.x*U,base=(t.y+(king?1.4:1.0))*U;
+  if(!t.alive){
+    if(king)cell(img('ruins/castle'),320,256,0,0,160,254,x,base,1);else cell(img('ruins/tower'),128,256,0,0,64,230,x,base,1);
+    const fi=img('fx/fire');
+    for(const[dx,dy,i]of(king?[[-1.2,-1.3,0],[0.9,-1.1,3]]:[[0,-1.0,1]]))cell(fi,128,128,(Math.floor(clock*10)+i)%7,0,64,114,x+dx*U,base+dy*U,0.7);
+    return;
+  }
+  const shake=(S.t-t.hit<0.08&&S.t>0.2)?Math.sin(clock*90)*0.05*U:0;
+  if(king)cell(img(TEAM[t.side]+'/castle'),320,256,0,0,160,250,x+shake,base,1);
+  else{
+    cell(img(TEAM[t.side]+'/tower'),128,256,0,0,64,235,x+shake,base,1);
+    // the tower's archer, facing its target
+    const shooting=towerShooting(S,t),face=t.aim==null?(t.side===0?1:-1):(Math.cos(t.aim)>=0?1:-1);
+    const up=t.aim!=null&&Math.abs(Math.sin(t.aim))>0.7,row=shooting?(up?(Math.sin(t.aim)<0?2:6):4):0;
+    const col=shooting?Math.min(7,Math.floor((S.t%0.8)/0.1)):Math.floor(clock*8)%6;
+    cell(img(TEAM[t.side]+'/archer'),192,192,col,row,99,134,x+shake,base-2.15*U,0.8,face<0);
+  }
+}
+function hpBar(x,y,w,h,frac,side,num){
+  rr(x-w/2,y,w,h,h*0.4);fs('#1b1830',OL,Math.max(2,0.1*U));
+  if(frac>0){rr(x-w/2,y,Math.max(h*0.6,w*frac),h,h*0.4);fs(TC[side].m,0)}
+  if(num!=null)label(String(num),x,y+h*0.55,h*1.45,'#fff',h*0.45);
+}
+function towerBar(t){
+  const king=t.kind==='K',bw=(king?3.4:2.8)*U,bh=0.55*U;
+  // Bars sit on the far side from the fighting: above Sol's towers, below Jev's.
+  const y=king?(t.side===1?0.15*U:(H-0.15)*U-bh):t.side===1?(t.y-2.85)*U:(t.y+1.15)*U;
+  hpBar(t.x*U,y,bw,bh,t.hp/t.max,t.side,Math.ceil(t.hp));
+}
+
+/* troops */
+const FACE={};
+function facing(u){if(u.dir==='left')FACE[u.id]=-1;else if(u.dir==='right')FACE[u.id]=1;else if(FACE[u.id]==null)FACE[u.id]=u.side===0?1:-1;return FACE[u.id]}
+function troop(u,t,clock,alpha,ghost){
+  const A=UNIT[u.type],im=img(TEAM[u.side]+'/'+A.sheet),x=u.x*U,y=(u.y+0.45)*U,flip=facing(u)<0;
+  let row,col;
+  const age=u.atk==null?99:t-u.atk;
+  if(!ghost&&u.act==='attack'&&age<A.atkDur){const d=u.dir==='up'?'up':u.dir==='down'?'down':'right';[row]=A.atk[d];col=Math.floor(age/A.atkDur*A.atk[d][1])}
+  else if(!ghost&&u.act==='walk'){row=A.run[0];col=Math.floor(clock*10+u.id*1.7)%A.run[1]}
+  else{row=A.idle[0];col=ghost?0:Math.floor(clock*8+u.id)%A.idle[1]}
+  if(!ghost){const r=FOOT[u.type];E(x,y,r*1.15*U,r*0.42*U);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fill()}
+  const cw=A.cw||192;cell(im,cw,cw,col,row,A.ax,A.ay,x,y,A.scale,flip,alpha);
+}
+function troopBar(u){const A=UNIT[u.type],top=(u.y+0.45)*U-A.tall*P*A.scale-0.25*U;
+  hpBar(u.x*U,top,(u.type==='giant'?1.6:1.15)*U,0.28*U,u.hp/u.max,u.side)}
+
+function draw(S,clock){
+  ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.imageSmoothingEnabled=false;
+  ctx.fillStyle='#62a14a';ctx.fillRect(0,0,cv.width,cv.height);
+  drawWater(clock);ctx.drawImage(land,0,0);drawBridges();
+  const left=Math.max(0,Math.ceil(S.dur-S.t));
+  rr(7.1*U,(RIVER-0.85)*U,3.8*U,1.7*U,0.85*U);fs('#1b1830',OL,0.12*U);
+  label(Math.floor(left/60)+':'+String(left%60).padStart(2,'0'),9*U,(RIVER+0.06)*U,1.1*U,'#fff',0.2*U);
+
+  // Ghosts: the board a side is still answering, for troops that have since moved or died.
+  for(const i of[1,0]){const sd=S.sides[i];if(!sd||!sd.ghosts||S.over||S.t-sd.thinking_since<1)continue;
+    const a=Math.min(1,(S.t-sd.thinking_since-1)/0.6),now={};for(const u of S.units)now[u.id]=u;
+    ctx.save();ctx.setLineDash([0.18*U,0.22*U]);ctx.lineWidth=0.08*U;ctx.strokeStyle=`rgba(255,240,170,${0.6*a})`;
+    for(const g of sd.ghosts){const u=now[g.id];if(u&&Math.hypot(u.x-g.x,u.y-g.y)>=1.2){ctx.beginPath();ctx.moveTo(g.x*U,(g.y+0.2)*U);ctx.lineTo(u.x*U,(u.y+0.2)*U);ctx.stroke()}}
+    ctx.restore();
+    for(const g of sd.ghosts){const u=now[g.id];if(u&&Math.hypot(u.x-g.x,u.y-g.y)<1.2)continue;
+      ctx.save();if('filter' in ctx)ctx.filter='grayscale(1) brightness(1.5)';troop({...g,act:'idle'},S.t,clock,0.4*a,true);ctx.restore()}}
+
+  drawEdgeDecor(clock);
+  const things=[];for(const t of S.towers)things.push({y:t.y+(t.kind==='K'?1.4:1.0),t});for(const u of S.units)things.push({y:u.y+0.45,u});
+  things.sort((a,b)=>a.y-b.y);
+  for(const o of things){if(o.t)drawTower(S,o.t,clock);else troop(o.u,S.t,clock,S.t-o.u.hit<0.08?0.6:null)}
+  for(const t of S.towers)if(t.alive)towerBar(t);
+  for(const u of S.units)if(u.hp<u.max||u.max>=900)troopBar(u);
+
+  for(const s of S.shots){const p=Math.min(1,(S.t-s.t)/0.25),x=(s.x1+(s.x2-s.x1)*p)*U,y=(s.y1+(s.y2-s.y1)*p)*U,a=Math.atan2(s.y2-s.y1,s.x2-s.x1);
+    if(s.k==='bomb'){const lift=Math.sin(p*Math.PI)*0.9*U;cell(img('fx/dynamite'),64,64,Math.floor(p*12)%6,0,34,27,x,y-lift,0.9)}
+    else{const yy=s.k==='ball'?y-1.4*U*(1-p):y,im=img('fx/arrow');if(ready(im)){ctx.save();ctx.translate(x,yy);ctx.rotate(a);ctx.imageSmoothingEnabled=false;ctx.drawImage(im,0,0,64,64,-40*P,-35*P,64*P,64*P);ctx.restore()}}}
+
+  for(const f of S.fx){const a=S.t-f.t,x=f.x*U,y=f.y*U;
+    if(f.kind==='deploy'){
+      if(a<0.45){const k=a/0.45;ctx.globalAlpha=1-k;ctx.strokeStyle='#fff';ctx.lineWidth=0.18*U;ctx.beginPath();ctx.ellipse(x,y+0.4*U,(0.6+1.6*k)*U,(0.25+0.6*k)*U,0,0,TAU);ctx.stroke();ctx.globalAlpha=1}
+      const life=a/1.4,pop=Math.min(1,a/0.12),cy=y+(f.side===0?3.2:-3.2)*U-(f.side===0?-1:1)*life*0.4*U,s=U*pop;
+      ctx.globalAlpha=life<0.7?1:Math.max(0,1-(life-0.7)/0.3);
+      ctx.setTransform(s,0,0,s,x,cy);rr(-1.5,-1.75,3,3.5,0.3);fs('#fff4d6',TC[f.side].d,0.22);rr(-1.5,-1.75,3,3.5,0.3);ctx.strokeStyle=OL;ctx.lineWidth=0.07;ctx.stroke();
+      rr(-1.25,-1.5,2.5,2.05,0.2);fs(TC[f.side].l,0);
+      if(f.lat!=null){rr(-1.35,1.95,2.7,0.95,0.45);fs(f.side===0?TC[0].d:'#ffe066',OL,0.08)}
+      ctx.setTransform(s,0,0,s,x-1.5*s,cy-1.6*s);ctx.beginPath();ctx.arc(0,0.12,0.58,-Math.PI*0.25,Math.PI*1.25);ctx.lineTo(0,-0.78);ctx.closePath();fs('#f255f0',OL,0.12);
+      ctx.setTransform(1,0,0,1,0,0);
+      const A=UNIT[f.type];const k=s/U;
+      if(A){const Pk=P,cw=A.cw||192;P=Pk*k*0.85;cell(img(TEAM[f.side]+'/'+A.sheet),cw,cw,0,A.idle[0],A.ax,A.ay,x,cy+0.45*s,Math.min(A.scale,1.15),false,null);P=Pk}
+      label(f.label,x,cy+1.12*s,0.78*s,'#fff',0.2*s);
+      label(String(CARD_COST[f.type]||''),x-1.5*s,cy-1.48*s,0.78*s,'#fff',0.22*s);
+      if(f.lat!=null){ctx.font=`800 ${0.62*s}px ${MONO}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=f.side===0?'#fff':OL;ctx.fillText(f.lat.toFixed(f.lat<1?2:1)+'s',x,cy+2.44*s)}
+      ctx.globalAlpha=1}
+    else if(f.kind==='boom'&&a<0.5){strip('fx/explosion',192,192,Math.floor(a/0.5*9),96,96,x,y,f.r*0.9)}
+    else if(f.kind==='pop'){cell(img('fx/dead'),128,128,Math.floor(a/0.1)%7,a<0.7?0:1,65,99,x,y+0.45*U,0.7)}
+    else if(f.kind==='fall'){
+      if(a<0.9)strip('fx/explosion',192,192,Math.floor(a/0.9*9),96,96,x,y,2.6);
+      const k=a/1.4;ctx.globalAlpha=Math.max(0,1-k*k);ctx.setTransform(U,0,0,U,x,y-(1+k*2.5)*U);crown(0,0,1.1);fs(GOLD,OL,0.14);ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1}
+  }
+  // thinking bubble beside each king that is still waiting on its model
+  for(const i of[1,0]){const sd=S.sides[i],kt=S.towers.find(t=>t.side===i&&t.kind==='K');
+    if(!sd||S.over||sd.thinking_since==null||!kt.alive)continue;const el=S.t-sd.thinking_since;if(el<0.6)continue;
+    const bx=14.6,by=i===1?1.9:H-1.9;ctx.setTransform(U,0,0,U,0,0);
+    ctx.beginPath();ctx.moveTo(11.7,by-0.35);ctx.lineTo(10.7,by+(i===1?0.5:-0.5));ctx.lineTo(11.7,by+0.35);ctx.closePath();fs('#fff',OL,0.12);
+    rr(bx-3.1,by-1.05,6.2,2.1,0.7);fs('#fff',OL,0.12);ctx.fillStyle='#fff';ctx.fillRect(11.55,by-0.28,0.3,0.56);
+    ctx.beginPath();ctx.arc(bx-2.05,by,0.62,-Math.PI/2,-Math.PI/2+TAU*Math.min(1,el/8));ctx.strokeStyle=TC[i].m;ctx.lineWidth=0.2;ctx.stroke();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.font=`800 ${0.95*U}px ${MONO}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=TC[i].d;ctx.fillText(el.toFixed(1)+'s',(bx+0.55)*U,(by+0.05)*U)}
+}
+
+/* ---------- decision rails ---------- */
+const tapes=[$('tp0'),$('tp1')];
+function sizeTapes(){for(const c of tapes){c.width=Math.round(c.clientWidth*2);c.height=84}}
+// A 10-second rail: one tick per decision (tall with a pink dot when it played a card), a yellow bar for the call still out, now at the right edge.
+function drawTape(i,S){
+  const c=tapes[i],g=c.getContext('2d'),w=c.width,h=c.height,span=10,pad=14,t0=S.t-span,X=t=>pad+(t-t0)/span*(w-2*pad),mid=54,col=TC[i];
+  const pill=(x,y,ww,hh)=>{g.beginPath();g.roundRect?g.roundRect(x,y,ww,hh,Math.min(ww,hh)/2):g.rect(x,y,ww,hh);g.fill()};
+  g.clearRect(0,0,w,h);
+  g.font=`700 24px ${MONO}`;g.textBaseline='top';g.fillStyle='rgba(255,255,255,.6)';
+  g.textAlign='left';g.fillText('10s ago',pad,0);g.textAlign='right';g.fillText('now',w-pad,0);
+  g.fillStyle='rgba(255,255,255,.12)';pill(pad,mid-3,w-2*pad,6);
+  const sd=S.sides[i];
+  for(const d of sd.recent||[]){if(d.a<t0)continue;const x=X(d.a);
+    if(d.c){g.fillStyle='#fff';pill(x-4,mid-22,8,44);g.fillStyle='#f255f0';g.beginPath();g.arc(x,mid-22,8,0,TAU);g.fill();g.strokeStyle=OL;g.lineWidth=3;g.stroke()}
+    else{g.fillStyle=col.l;pill(x-3,mid-14,6,28)}}
+  const nx=X(S.t);
+  if(sd.thinking_since!=null&&!S.over){const x1=X(Math.max(sd.thinking_since,t0,0));g.fillStyle='rgba(255,224,102,.9)';pill(x1,mid-11,Math.max(4,nx-x1),22)}
+  g.fillStyle='#fff';g.beginPath();g.arc(nx,mid,7,0,TAU);g.fill();
+}
+
+/* ---------- HUD ---------- */
+const cache={};
+function set(key,v,fn){if(cache[key]!==v){cache[key]=v;fn(v)}}
+function hud(S){
+  for(const i of[0,1]){const s=S.sides[i];
+    set('p'+i,(s.elixir/10).toFixed(3),v=>$('pp'+i).firstChild.style.transform='scaleX('+v+')');
+    set('e'+i,Math.floor(s.elixir+1e-6),v=>$('ex'+i).textContent=v);
+    set('cap'+i,s.elixir>=9.99&&!S.over,v=>{$('pp'+i).classList.toggle('capped',v);$('tk'+i).classList.toggle('capped',v)});
+    set('d'+i,s.decisions,v=>$('dc'+i).textContent=v);
+    set('lk'+i,s.wasted.toFixed(1),v=>{const L=$('lk'+i);L.querySelector('b').textContent=v;L.classList.toggle('on',s.wasted>=0.1)});
+    set('lkb'+i,Math.floor(s.wasted),v=>{const L=$('lk'+i);if(!v)return;L.classList.remove('bump');void L.offsetWidth;L.classList.add('bump')});
+    const thinking=s.thinking_since!=null&&!S.over&&S.t-s.thinking_since>0.5;
+    let lbl,num,cls='status';
+    if(thinking){lbl='thinking…';num=(S.t-s.thinking_since).toFixed(1)+'s';cls='status thinking'}
+    else if(s.last&&s.last.why==='error'){lbl='call failed';num='–';cls='status thinking'}
+    else if(i===0&&s.avg!=null){lbl='avg decision';num=s.avg.toFixed(2)+'s'}
+    else if(s.last){lbl='decided in';num=s.last.lat.toFixed(1)+'s'}
+    else{lbl='ready';num='–'}
+    const st=$('st'+i);set('sl'+i,lbl,v=>st.firstChild.textContent=v);set('sn'+i,num,v=>st.lastChild.textContent=v);set('sc'+i,cls,v=>st.className=v);
+    drawTape(i,S);
+  }
+}
+
+/* ---------- captions: plain-language narration for sound-off viewing ---------- */
+const capEl=$('cap');let capQueue=[],capShownAt=-99,capFlags={},seenFalls=0;
+function say(key,html){if(capFlags[key])return;capFlags[key]=1;capQueue.push(html)}
+function showCap(html,now){capEl.classList.add('out');setTimeout(()=>{capEl.innerHTML=html;capEl.classList.remove('out')},180);capShownAt=now}
+const N=i=>`<span class="${i?'s':'j'}">${NAMES[i]}</span>`;
+function captions(S,now){
+  if(!S||!S.sides.length)return;
+  const sol=S.sides[1],jev=S.sides[0];
+  if(S.t>0)say('open',`Same board, same rules. The clock keeps running while each model thinks.`);
+  if(jev.avg!=null&&sol.decisions>=1)say('speed',`${N(0)} decides in <span class="n">${jev.avg.toFixed(2)}s</span>. ${N(1)} took <span class="n">${sol.last.lat.toFixed(1)}s</span>.`);
+  if(sol.thinking_since!=null&&S.t-sol.thinking_since>2.5)say('wait',`${N(1)} is still thinking. The match clock keeps running.`);
+  if(sol.ghosts&&S.t-sol.thinking_since>3.5&&S.units.length>2)say('ghost',`The faded troops are the board ${N(1)} is answering. It has already moved.`);
+  if(jev.decisions>=40)say('count',`${N(0)} has made <span class="n">${jev.decisions}</span> decisions. ${N(1)} has made <span class="n">${sol.decisions}</span>.`);
+  const falls=S.towers.filter(t=>!t.alive);
+  for(const t of falls){const key='t'+t.side+t.kind;if(capFlags[key])continue;
+    const by=1-t.side,clock=Math.max(0,Math.ceil(S.dur-S.t));
+    if(t.kind==='K'){say(key,`${N(by)} takes the king tower. Game over.`);capQueue=[capQueue.pop()];capShownAt=-99}
+    else say(key,`Tower down at <span class="n">0:${String(clock).padStart(2,'0')}</span>. ${by===0?`${N(1)} was answering a board from seconds ago.`:`${N(1)} breaks through.`}`)}
+  if(capQueue.length&&now-capShownAt>3.4)showCap(capQueue.shift(),now);
+}
+function resetCaptions(){capQueue=[];capFlags={};capShownAt=-99;capEl.innerHTML='&nbsp;'}
+
+/* ---------- intro and result cards ---------- */
+function setPlayers(players){
+  NAMES=players.map(p=>p.name);
+  for(const i of[0,1]){const p=players[i];
+    for(const id of['nm','inm','th'])$(id+i).textContent=p.name;
+    $('md'+i).textContent=p.model+(p.effort?' · '+p.effort:'');$('imd'+i).textContent=p.model;}
+  document.title=NAMES[1]+' vs '+NAMES[0]+': System One Arena';
+  paintLand();
+}
+function setLabels(mock){
+  const badge={demo:'SIMULATION',replay:mock?'REPLAY · MOCK':'REPLAY',live:mock?'MOCK OPENROUTER':'LIVE MODEL CALLS'}[MODE];
+  const line={demo:'Same strategy code on both sides. Only decision time differs.',
+    replay:mock?'Recorded with mock OpenRouter: no model was called.':'Recorded live: every move was a real model call.',
+    live:mock?'Answers come from mock OpenRouter: no model is called.':'Every move is a real model call. The clock never waits.'}[MODE];
+  $('badge').textContent=badge;$('tagline').textContent=line;
+  $('fine').textContent={demo:'Browser simulation of the arena engine: both sides run the same rule-based playbook, with decision times sampled around 0.35s and 6s, the arena\'s latency profiles for each API.',
+    replay:mock?'Replay of a mock match: answers came from mock OpenRouter.':'Replay of a live match: each move came from its model through OpenRouter.',
+    live:mock?'Mock match: answers came from mock OpenRouter, not a model.':'Live match: each move came from its model through OpenRouter.'}[MODE];
+}
+function introLatency(a,b){for(const[i,v]of[[0,a],[1,b]]){const e=$('ilat'+i);if(v==null){e.hidden=true;continue}
+  e.firstChild.textContent='~'+(v<1?v.toFixed(2):v.toFixed(1))+'s';e.hidden=false}}
+function showResult(r,dur,t){
+  const w=r.winner,sd=r.sides;
+  $('verdict').textContent=NAMES[w]+' wins';$('verdict').classList.toggle('lost',w!==0);
+  $('crowns').innerHTML='<svg viewBox="0 0 24 20"><use href="#crown"/></svg>'.repeat(Math.max(1,sd[w].crowns));
+  $('resSub').textContent=r.reason==='king'?`${sd[0].crowns}–${sd[1].crowns} on towers · king tower down with ${Math.max(0,Math.ceil(dur-r.seconds))}s left on the clock`
+    :`${sd[0].crowns}–${sd[1].crowns} on towers · decided at the final whistle`;
+  const row=(k,f,better)=>{const v=[0,1].map(i=>f(sd[i]));[0,1].forEach(i=>{const e=$('r_'+k+i);e.textContent=v[i].txt;e.classList.toggle('best',better(v[i].n,v[1-i].n))})};
+  row('t',s=>{const a=s.avg_decision_s;return{n:a==null?99:a,txt:a==null?'–':a.toFixed(a<1?2:1)+'s'}},(a,b)=>a<b);
+  row('d',s=>({n:s.decisions,txt:String(s.decisions)}),(a,b)=>a>b);
+  // Elixir lost at the cap, in troops: the deck's cards average about 3 elixir.
+  row('w',s=>{const n=Math.round(s.elixir_wasted/3);return{n,txt:n?'≈'+n:'0'}},(a,b)=>a<b);
+  row('c',s=>({n:s.crowns,txt:String(s.crowns)}),(a,b)=>a>b);
+  const slow=sd[1].avg_decision_s,secs=slow==null?null:Math.round(slow);
+  const words=['zero','one','two','three','four','five','six','seven','eight','nine','ten'];
+  $('thesis').innerHTML=w===0&&secs?`When the world keeps moving, <em>a good answer now</em> beats a better answer in ${words[secs]||secs} seconds.`
+    :`This time ${NAMES[w]} won. <em>Speed is not the whole story.</em>`;
+  $('bAgain').hidden=!(MODE==='live'&&CONFIG&&CONFIG.can_start);
+  $('result').classList.add('show');
+}
+
+/* ---------- sources ---------- */
+function lerpFrame(a,b,k){
+  if(!a||k>=1)return b;k=Math.max(0,k);
+  const pos={};for(const u of a.units)pos[u.id]=u;
+  return{...b,t:a.t+(b.t-a.t)*k,units:b.units.map(u=>{const p=pos[u.id];return p?{...u,x:p.x+(u.x-p.x)*k,y:p.y+(u.y-p.y)*k}:u})};
+}
+let view=null,elapsed=0,clock=0,paused=QS.has('pause'),overAt=null,resultFor=null,matchKey=null,last=performance.now();
+const EMPTY={t:0,dur:60,over:false,units:[],towers:[[0,'L',4,22.5],[0,'R',14,22.5],[0,'K',9,25.6],[1,'L',4,5.5],[1,'R',14,5.5],[1,'K',9,2.4]]
+  .map(([side,kind,x,y])=>({side,kind,x,y,hp:kind==='K'?6000:3800,max:kind==='K'?6000:3800,alive:true,aim:null,hit:-9})),shots:[],fx:[],
+  sides:[0,1].map(()=>({elixir:5,wasted:0,decisions:0,crowns:0,thinking_since:null,last:null,avg:null,recent:[],ghosts:null}))};
+function newMatch(key){matchKey=key;overAt=null;resultFor=null;resetCaptions();for(const k in cache)delete cache[k];for(const k in FACE)delete FACE[k];$('result').classList.remove('show')}
+
+// demo: the engine runs here
+let sim=null,acc=0;
+function demoRestart(){sim=new window.DemoSim({seed:14,duration:40});acc=0;elapsed=0;newMatch('demo'+performance.now());$('intro').classList.add('show');
+  if(AT){while(sim.t<AT&&!sim.over)sim.step(1/60);elapsed=INTRO+1e-3}}
+function demoView(dt){if(elapsed>INTRO){$('intro').classList.remove('show');acc+=dt;while(acc>=1/60&&!sim.over){sim.step(1/60);acc-=1/60}}return sim.frame()}
+
+// replay: recorded frames on their own clock, after the intro card
+let rframes=null;
+function replayRestart(){elapsed=AT?INTRO+AT:0;newMatch('replay'+performance.now());$('intro').classList.add('show')}
+function replayView(){
+  if(!rframes)return null;const t=elapsed-INTRO;
+  if(t<0)return rframes[0];$('intro').classList.remove('show');
+  let i=rframes.findIndex(f=>f.t>t);if(i<0)return rframes[rframes.length-1];if(i===0)return rframes[0];
+  const a=rframes[i-1],b=rframes[i];return lerpFrame(a,b,(t-a.t)/((b.t-a.t)||1));
+}
+
+// live: the service pushes every frame; draw between the last two
+let fa=null,fb=null,fbAt=0,gap=50;
+function liveView(now){return fb?lerpFrame(fa,fb,(now-fbAt)/gap):null}
+function onLiveFrame(f,id,now){
+  if(id!==matchKey){newMatch(id);fa=null}
+  if(fb&&f.t<fb.t)fa=null;
+  fa=fb&&f.t>=fb.t?fb:null;if(fa)gap=Math.max(16,Math.min(200,now-fbAt));fb=f;fbAt=now;
+  if(!f.over)$('intro').classList.remove('show');
+}
+
+/* ---------- loop ---------- */
+function loop(now){
+  const dt=paused?0:Math.min(0.1,(now-last)/1000);last=now;elapsed+=dt;clock+=dt;
+  view=MODE==='demo'?demoView(dt):MODE==='replay'?replayView():liveView(now);
+  const S=view||EMPTY;
+  if(S.over&&overAt==null)overAt=elapsed;
+  if(S.over&&S.result&&overAt!=null&&elapsed-overAt>OUTRO_DELAY&&resultFor!==matchKey){resultFor=matchKey;showResult(S.result,S.dur,S.t)}
+  draw(S,clock);hud(S);if(view)captions(S,elapsed);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- controls ---------- */
+function startMatch(){
+  $('introNote').textContent='Starting…';
+  fetch('api/matches',{method:'POST',headers:AUTH}).then(r=>r.json().then(j=>{if(!r.ok)throw new Error(j.detail||r.status)}))
+    .catch(e=>{$('introNote').textContent='Could not start: '+e.message;$('intro').classList.add('show')});
+}
+function restart(){if(MODE==='demo')demoRestart();else if(MODE==='replay')replayRestart()}
+$('bStart').onclick=$('bStartIntro').onclick=startMatch;
+$('bAgain').onclick=()=>{$('result').classList.remove('show');$('intro').classList.add('show');startMatch()};
+$('bReplay').onclick=restart;
+$('bPause').onclick=()=>{paused=!paused;$('bPause').textContent=paused?'Resume':'Pause'};
+$('bClean').onclick=()=>{document.body.classList.toggle('clean');fitFrame()};
+document.addEventListener('keydown',e=>{if(e.target.closest&&e.target.closest('button')&&e.key===' ')return;
+  if(e.key===' '&&MODE!=='live'){e.preventDefault();$('bPause').click()}else if((e.key==='r'||e.key==='R')&&MODE!=='live')restart();else if(e.key==='c'||e.key==='C')$('bClean').click()});
+
+/* ---------- boot ---------- */
+fitFrame();sizeArena();sizeTapes();
+for(const im of Object.values(IMG))im.addEventListener('load',paintLand,{once:true});
+if(document.fonts)document.fonts.ready.then(paintLand);
+const playback=MODE!=='live';
+$('bReplay').hidden=$('bPause').hidden=!playback;if(paused)$('bPause').textContent='Resume';
+if(!playback)$('hint').textContent='C toggles clean frame. For a 1080×1920 capture, size the window to 9:16 and use Clean frame. To record a finished match, open it with ?replay=<id>.';
+
+if(MODE==='demo'){
+  setLabels(false);introLatency(0.35,6);$('introNote').textContent='Simulation: no model is called.';demoRestart();
+}else{
+  fetch('api/config',{cache:'no-store',headers:AUTH}).then(r=>r.json()).then(c=>{
+    CONFIG=c;setPlayers(c.players);setLabels(c.mock);
+    if(MODE==='replay'){
+      const id=QS.get('replay');$('introNote').textContent='Loading replay…';
+      Promise.all([fetch('api/matches/'+encodeURIComponent(id)+'/frames').then(r=>{if(!r.ok)throw new Error('no such match');return r.text()}),
+        fetch('api/matches').then(r=>r.json())]).then(([t,list])=>{
+        rframes=t.trim().split('\n').map(l=>JSON.parse(l));
+        const m=list.matches.find(m=>m.id===id)||{};setLabels(!!m.mock);
+        const res=rframes[rframes.length-1].result;if(res)introLatency(res.sides[0].avg_decision_s,res.sides[1].avg_decision_s);
+        $('introNote').textContent='Replay of match '+id+'.';replayRestart();
+      }).catch(e=>{$('introNote').textContent='Replay unavailable: '+e.message});
+    }else{
+      $('bStart').hidden=$('bStartIntro').hidden=!c.can_start;
+      $('introNote').textContent=c.running?'A match is running…':!c.can_start?'Waiting for the next match…':c.mock?'Mock OpenRouter: no model will be called.':'Every move will be a live model call.';
+      const es=new EventSource('api/stream');
+      es.addEventListener('frame',e=>{const m=JSON.parse(e.data);onLiveFrame(m.frame,m.match,performance.now())});
+      es.onerror=()=>{$('introNote').textContent='Reconnecting to the arena…'};
+    }
+  }).catch(()=>{$('introNote').textContent='The arena service is not reachable.'});
+}
+requestAnimationFrame(loop);
+})();

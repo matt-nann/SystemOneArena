@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     FRAME_HZ: int = 20
     # Seconds the board is shown frozen at 0:00 before the clock starts, for the viewer's start banner.
     # No model is asked anything until the clock starts, and these frames are not written to the replay.
-    MATCH_PREROLL_SECONDS: float = 1.5
+    MATCH_PREROLL_SECONDS: float = 2.0
     # Cost controls. A gap between one side's calls (0 asks again as soon as an answer lands),
     # and a cap on calls per match: when it is reached no more requests go out and the match ends.
     DECISION_MIN_INTERVAL: float = 0.0

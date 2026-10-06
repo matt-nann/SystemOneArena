@@ -20,6 +20,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
 from .config import Settings
+from .engine.sim import CARDS
 from .match import MatchInProgress, MatchRunner
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -53,6 +54,7 @@ def build_app(settings: Settings, runner: MatchRunner, *, lifespan: Any = None) 
     async def config(authorization: Optional[str] = Header(None)) -> dict:
         return {
             "players": runner.players.roster,
+            "cards": {k: {"name": c["name"], "cost": c["cost"]} for k, c in CARDS.items()},
             "mock": settings.is_mock,
             "admin_required": bool(settings.ARENA_ADMIN_TOKEN),
             "can_start": may_start(authorization),

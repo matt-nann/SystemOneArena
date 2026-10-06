@@ -61,6 +61,19 @@ body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(
 .tally strong{color:#fff;font-weight:700}
 .tally.bad strong{color:var(--alert)}
 
+.hand{display:grid;grid-template-columns:repeat(4,1fr) .72fr;gap:5px;margin-top:6px}
+.jev .hand{margin:0 0 6px}
+.card{position:relative;background:#fff4d6;border:2px solid var(--outline);border-radius:9px;padding:3px 2px 2px;display:flex;flex-direction:column;align-items:center;
+  transition:opacity .15s,filter .15s,transform .15s}
+.card img{width:30px;height:30px;display:block}
+.card .cn{font-size:10.5px;font-weight:700;color:#2a1c00;line-height:1.1;white-space:nowrap}
+.card .cost{position:absolute;top:-6px;left:-6px;width:20px;height:22px;display:grid;place-items:center;font-family:var(--display);font-size:12px;color:#fff;
+  text-shadow:0 1px var(--outline),1px 0 var(--outline),-1px 0 var(--outline),0 -1px var(--outline)}
+.card .cost::before{content:"";position:absolute;inset:3px 2px 1px;background:var(--elixir);border:2px solid var(--outline);border-radius:60% 0 60% 60%;transform:rotate(-45deg)}
+.card .cost span{position:relative}
+.card.off{opacity:.45;filter:grayscale(.8)}
+.card.next{transform:scale(.86);transform-origin:center;opacity:.8}
+.card.next::after{content:"next";position:absolute;bottom:-14px;font-size:10px;color:var(--plate-soft)}
 .field{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center}
 canvas{display:block;border-radius:14px;max-width:100%;border:3px solid var(--outline)}
 .overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;background:var(--scrim);border-radius:14px;padding:16px}
@@ -96,6 +109,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
     <div class="row"><div class="name" id="nm1">Sol</div><div class="crowns" id="cr1" aria-label="Towers destroyed"><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg></div></div>
     <div class="row"><div class="sub" id="sub1">frontier LLM</div><div class="state" id="st1">ready</div></div>
     <div class="meter"><div class="drop"><span id="ex1">5</span></div><div class="pips" id="pp1"></div><div class="tally" id="ws1">wasted <strong>0</strong></div><div class="tally" id="dc1">decisions <strong>0</strong></div></div>
+    <div class="hand" id="hd1" aria-label="Sol's cards"></div>
   </section>
 
   <div class="field" id="field">
@@ -121,6 +135,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
   </div>
 
   <section class="plate jev" id="plate0" aria-label="Jev">
+    <div class="hand" id="hd0" aria-label="Jev's cards"></div>
     <div class="meter"><div class="drop"><span id="ex0">5</span></div><div class="pips" id="pp0"></div><div class="tally" id="ws0">wasted <strong>0</strong></div><div class="tally" id="dc0">decisions <strong>0</strong></div></div>
     <div class="row"><div class="name" id="nm0">Jev</div><div class="crowns" id="cr0" aria-label="Towers destroyed"><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg><svg><use href="#crown"/></svg></div></div>
     <div class="row"><div class="sub" id="sub0">System 1 model</div><div class="state" id="st0">ready</div></div>
@@ -138,7 +153,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
    change a match except the Start button, which needs the admin token when one is set. */
 // Board layout in tiles (matches arena/engine/sim.py).
 const W=18,H=28,RIVER=14,LANES=[4,14];
-let NAMES=['Jev','Sol'], MARK=['JEV','SOL'], CONFIG=null;
+let NAMES=['Jev','Sol'], CONFIG=null;
 const $=id=>document.getElementById(id);
 const QS=new URLSearchParams(location.search),ADMIN=QS.get('admin'),REPLAY=QS.get('replay');
 const AUTH=ADMIN?{Authorization:'Bearer '+ADMIN}:{};
@@ -149,7 +164,8 @@ const TAU=Math.PI*2,OL='#1d1a2b';
 const TEAM=[{m:'#3d8bff',d:'#1f5bcc',l:'#a9d0ff'},{m:'#f24a40',d:'#b3261f',l:'#ffb0a8'}];
 const SKIN='#f4c9a0',STEEL='#cfd6e2',WOOD='#a9743f',GOLD='#ffcb45';
 const DISPLAY='"Lilita One","Arial Rounded MT Bold","Arial Black",sans-serif';
-const SCALE={knight:0.95,archers:0.82,swarm:0.66,giant:1.32,bomber:0.84};
+const SCALE={knight:0.95,archers:0.82,swarm:0.66,giant:1.32,bomber:0.86};
+let CARDS={knight:{name:'Knight',cost:3},archers:{name:'Archers',cost:3},giant:{name:'Giant',cost:5},swarm:{name:'Swarm',cost:2},bomber:{name:'Bomber',cost:3}};
 
 for(const i of[0,1]){const p=$('pp'+i);for(let n=0;n<10;n++){const e=document.createElement('i');e.appendChild(document.createElement('b'));p.appendChild(e)}}
 
@@ -163,8 +179,8 @@ function crown(cx,cy,q){ctx.beginPath();ctx.moveTo(cx-q,cy+q*.7);ctx.lineTo(cx-q
 function label(txt,x,y,px,fill,lw){ctx.font=`${px}px ${DISPLAY}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';ctx.lineWidth=lw||px*0.28;ctx.strokeStyle=OL;ctx.strokeText(txt,x,y);ctx.fillStyle=fill;ctx.fillText(txt,x,y)}
 
 /* troops, drawn around a body centre at 0,0; feet near y=1. sw is 1 right after an attack, easing to 0 */
-function sprite(type,side,sw){
-  const tm=TEAM[side],front=side===1;ctx.lineJoin='round';
+function sprite(type,side,sw,front=side===1){
+  const tm=TEAM[side];ctx.lineJoin='round';
   if(type==='knight'){
     rr(-0.42,0.55,0.32,0.45,0.1);fs('#3a3f52');rr(0.1,0.55,0.32,0.45,0.1);fs('#3a3f52');
     rr(-0.62,-0.4,1.24,1.15,0.35);fs(STEEL);
@@ -201,13 +217,17 @@ function sprite(type,side,sw){
       ctx.beginPath();ctx.arc(0,-0.72,0.2,0.2,Math.PI-0.2);ctx.strokeStyle=OL;ctx.lineWidth=0.08;ctx.stroke()}
     else{C(0,-0.95,0.62);fs('#8a5a2e')}
   }else{
-    rr(-0.3,0.5,0.24,0.42,0.1);fs('#3a3f52');rr(0.06,0.5,0.24,0.42,0.1);fs('#3a3f52');
-    rr(-0.42,-0.2,0.84,0.95,0.3);fs(tm.m);
-    if(front){C(0,-0.62,0.46);fs(SKIN);ctx.beginPath();ctx.arc(0,-0.68,0.48,Math.PI,TAU);ctx.closePath();fs(tm.d);
-      for(const k of[-1,1]){C(k*0.19,-0.58,0.15);fs('#dff6ff',OL,0.08)}}
-    else{C(0,-0.62,0.48);fs(tm.d)}
-    const by=-0.3-sw*0.35;C(0.74,by,0.36);fs('#2a2a35');C(0.63,by-0.11,0.09);fs('#8c8ca0',0);
-    C(0.9,by-0.42,0.1+0.05*Math.sin(clock*30));fs('#ffd23a',0);
+    // bomber: skull face, dark coat with a team sash, a big lit bomb held overhead (gone for a moment after a throw)
+    rr(-0.3,0.5,0.24,0.42,0.1);fs('#2b2b36');rr(0.06,0.5,0.24,0.42,0.1);fs('#2b2b36');
+    rr(-0.46,-0.2,0.92,0.95,0.3);fs('#3a3a48');
+    ctx.save();ctx.beginPath();rr(-0.46,-0.2,0.92,0.95,0.3);ctx.clip();ctx.rotate(-0.6);rr(-0.8,-0.05,1.6,0.26,0);fs(tm.m,0);ctx.restore();
+    for(const k of[-1,1]){rr(k*0.5-0.13,-0.6,0.26,0.6,0.12);fs('#ece8da')}
+    if(front){C(0,-0.62,0.44);fs('#ece8da');for(const k of[-1,1]){E(k*0.17,-0.64,0.12,0.14);fs(OL,0)}
+      ctx.strokeStyle=OL;ctx.lineWidth=0.05;ctx.beginPath();for(const x of[-0.12,0,0.12]){ctx.moveTo(x,-0.38);ctx.lineTo(x,-0.28)}ctx.stroke()}
+    else{C(0,-0.62,0.44);fs('#ece8da')}
+    if(sw<0.5){const by=-1.4;C(0,by,0.48);fs('#22222c');C(-0.16,by-0.15,0.12);fs('#6d6d82',0);
+      ctx.beginPath();ctx.moveTo(0.2,by-0.42);ctx.quadraticCurveTo(0.45,by-0.75,0.32,by-0.9);ctx.strokeStyle=WOOD;ctx.lineWidth=0.08;ctx.stroke();
+      C(0.32,by-0.92,0.13+0.06*Math.sin(clock*30));fs('#ffd23a',0);C(0.32,by-0.92,0.06);fs('#fff',0)}
   }
 }
 /* towers, drawn around 0,0 in tile units */
@@ -244,9 +264,6 @@ function paintGround(){
   const road=()=>{ctx.beginPath();for(const lx of LANES){ctx.moveTo(lx,5.5);ctx.lineTo(lx,22.5)}ctx.moveTo(LANES[0],5.5);ctx.lineTo(LANES[1],5.5);ctx.moveTo(LANES[0],22.5);ctx.lineTo(LANES[1],22.5);ctx.moveTo(9,5.5);ctx.lineTo(9,2.4);ctx.moveTo(9,22.5);ctx.lineTo(9,25.6)};
   ctx.lineCap='round';ctx.lineJoin='round';
   road();ctx.strokeStyle='#b39a5c';ctx.lineWidth=2.5;ctx.stroke();road();ctx.strokeStyle='#dcc98f';ctx.lineWidth=2.1;ctx.stroke();
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.globalAlpha=0.5;label(MARK[1],9*U,10*U,2.3*U,TEAM[1].l,0.35*U);label(MARK[0],9*U,18.3*U,4.6*U,TEAM[0].l,0.45*U);ctx.globalAlpha=1;
-  ctx.setTransform(U,0,0,U,0,0);
   ctx.fillStyle='#1f74c4';ctx.fillRect(0,RIVER-0.95,W,1.9);ctx.fillStyle='#38a3f0';ctx.fillRect(0,RIVER-0.8,W,1.6);
   for(const lx of LANES){rr(lx-1.35,RIVER-1.2,2.7,2.4,0.15);fs('#b8824a',OL,0.12);
     ctx.strokeStyle='rgba(29,26,43,.45)';ctx.lineWidth=0.06;ctx.beginPath();for(let y=RIVER-0.8;y<RIVER+1;y+=0.4){ctx.moveTo(lx-1.3,y);ctx.lineTo(lx+1.3,y)}ctx.stroke();
@@ -298,7 +315,7 @@ function draw(){
       E(0,1.02,0.82,0.3);fs('rgba(0,0,0,.28)',0);E(0,1.02,0.82,0.3);ctx.strokeStyle=TEAM[u.side].l;ctx.lineWidth=0.1;ctx.stroke();
       ctx.translate(0,bob);if(hit)ctx.globalAlpha=0.55;
       sprite(u.type,u.side,sw);ctx.globalAlpha=1;
-      if(u.hp<u.max||u.max>=900){ctx.setTransform(1,0,0,1,0,0);const top=u.y*U-0.35*k-(u.type==='giant'?1.9:1.65)*k;hpBar(u.x*U,top,Math.max(1.3*U,1.5*k),0.3*U,u.hp/u.max,u.side)}
+      if(u.hp<u.max||u.max>=900){ctx.setTransform(1,0,0,1,0,0);const top=u.y*U-0.35*k-(u.type==='giant'?1.9:u.type==='bomber'?2.5:1.65)*k;hpBar(u.x*U,top,Math.max(1.3*U,1.5*k),0.3*U,u.hp/u.max,u.side)}
     }
   }
   ctx.setTransform(1,0,0,1,0,0);
@@ -337,9 +354,30 @@ function draw(){
 
 const cache={};
 function put(id,v,cls){if(cache[id]!==v){cache[id]=v;$(id).textContent=v}if(cache[id+'|c']!==cls){cache[id+'|c']=cls;$(id).className=cls}}
+/* card art: the troop sprite, facing the viewer, rendered once per card and side */
+const ICONS={};
+function icon(type,side){
+  const key=type+side;if(ICONS[key])return ICONS[key];
+  const c=document.createElement('canvas');c.width=c.height=64;const main=ctx;ctx=c.getContext('2d');
+  const k={giant:13,bomber:14,swarm:21,knight:17,archers:18}[type]||16;
+  ctx.setTransform(k,0,0,k,32,type==='bomber'?44:36);sprite(type,side,0,true);ctx=main;
+  return ICONS[key]=c.toDataURL();
+}
+function tile(type,side,next){
+  const c=CARDS[type]||{name:type,cost:'?'};
+  return `<div class="card${next?' next':''}" data-cost="${c.cost}" title="${c.name}: ${c.cost} elixir${next?' (next card)':''}">`+
+    `<div class="cost"><span>${c.cost}</span></div><img alt="" src="${icon(type,side)}"><div class="cn">${c.name}</div></div>`;
+}
+function hand(i,s,over){
+  if(!s.hand)return;
+  const key=s.hand.join()+'|'+s.next;
+  if(cache['h'+i]!==key){cache['h'+i]=key;$('hd'+i).innerHTML=s.hand.map(t=>tile(t,i,false)).join('')+(s.next?tile(s.next,i,true):'');for(let n=0;n<5;n++)delete cache['o'+i+n]}
+  const tiles=$('hd'+i).children;
+  for(let n=0;n<s.hand.length;n++){const off=over||+tiles[n].dataset.cost>s.elixir+1e-6,k='o'+i+n;if(cache[k]!==off){cache[k]=off;tiles[n].classList.toggle('off',off)}}
+}
 function hud(){
   const S=view;if(!S)return;
-  for(const i of[0,1]){const s=S.sides[i];
+  for(const i of[0,1]){const s=S.sides[i];hand(i,s,S.over);
     const pips=$('pp'+i).children;for(let n=0;n<10;n++){const f=Math.max(0,Math.min(1,s.elixir-n)),k='p'+i+n,v=f.toFixed(2);if(cache[k]!==v){cache[k]=v;pips[n].firstChild.style.transform='scaleX('+v+')'}}
     const ex=Math.floor(s.elixir+1e-6);if(cache['e'+i]!==ex){cache['e'+i]=ex;$('ex'+i).textContent=ex}
     const capped=s.elixir>=9.99&&!S.over;if(cache['cap'+i]!==capped){cache['cap'+i]=capped;$('pp'+i).classList.toggle('capped',capped)}
@@ -379,7 +417,7 @@ function onFrame(f,id,now){
   if(f.over&&!overAt)overAt=now;
 }
 function setPlayers(players){
-  NAMES=players.map(p=>p.name);MARK=NAMES.map(n=>n.toUpperCase());
+  NAMES=players.map(p=>p.name);
   $('sub0').textContent=players[0].model;$('sub1').textContent=players[1].model+(players[1].effort?' · '+players[1].effort:'');
   for(const i of[0,1]){$('nm'+i).textContent=NAMES[i];$('th'+i).textContent=NAMES[i];$('plate'+i).setAttribute('aria-label',NAMES[i])}
   $('vsA').textContent=NAMES[1];$('vsB').textContent=NAMES[0];
@@ -430,7 +468,7 @@ $('btnAgain').onclick=()=>{$('result').classList.remove('show');startMatch()};
 $('btnReplay').onclick=()=>{rStart=performance.now();overAt=0;shownFor=null;$('result').classList.remove('show')};
 
 fetch('/api/config',{cache:'no-store',headers:AUTH}).then(r=>r.json()).then(c=>{
-  CONFIG=c;setPlayers(c.players);
+  CONFIG=c;if(c.cards)CARDS=c.cards;setPlayers(c.players);
   if(c.mock){$('foot').textContent='Mock OpenRouter: answers come from mock_openrouter, no model is called.';
     $('note').textContent='Mock run: answers came from mock_openrouter, not a model.'}
   $('btnStart').hidden=!c.can_start||!!REPLAY;

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     SOL_REASONING_EFFORT: str = ""
     SOL_MAX_TOKENS: int = 4000
     SOL_TIMEOUT_SECONDS: float = 60.0
+    # How Sol is asked: "chat" (structured chat completion) or "decisions" (the Decisions endpoint,
+    # like Jev). SOL_API=decisions with SOL_MODEL=typesafe/jev-1.13 plays Jev against Jev.
+    SOL_API: str = "chat"
 
     # ── Match ────────────────────────────────────────────────────────
     MATCH_SECONDS: float = 60.0
@@ -41,6 +44,10 @@ class Settings(BaseSettings):
     # Engine ticks and frames streamed to viewers, per second.
     TICK_HZ: int = 30
     FRAME_HZ: int = 20
+    # Cost controls. A gap between one side's calls (0 asks again as soon as an answer lands),
+    # and a cap on calls per match: when it is reached no more requests go out and the match ends.
+    DECISION_MIN_INTERVAL: float = 0.0
+    MAX_CALLS_PER_MATCH: int = 0
 
     # ── Service ──────────────────────────────────────────────────────
     PORT: int = 8000

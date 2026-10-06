@@ -75,7 +75,7 @@ class MockSettings(BaseSettings):
 
 class ScriptBody(BaseModel):
     model: str = "*"
-    # Each entry is one response: {"card": "giant", "lane": "left"} or any answer object,
+    # Each entry is one response: {"card": "brute", "lane": "left"} or any answer object,
     # {"error": {"status": 429, "message": "..."}}, {"timeout": true}, {"malformed": true},
     # optionally with "latency_ms".
     responses: List[Dict[str, Any]]

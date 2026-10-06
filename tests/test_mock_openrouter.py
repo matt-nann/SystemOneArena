@@ -19,8 +19,8 @@ async def test_both_players_get_valid_moves_through_the_client(settings, snap, m
     p, client = players(settings, mock_app)
     for who in ("jev", "sol"):
         move = await p.decide(who, snap)
-        # The playbook defends the left lane against the Giant with Swarm.
-        assert (move.card, move.lane) == ("swarm", 0), who
+        # The playbook defends the left lane against the Brute with Goblins.
+        assert (move.card, move.lane) == ("goblins", 0), who
     calls = mock_app.state.mock.calls
     assert [c["endpoint"] for c in calls] == ["decisions", "chat"]
     assert calls[1]["body"]["provider"] == {"require_parameters": True}

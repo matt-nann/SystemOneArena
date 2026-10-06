@@ -19,13 +19,13 @@ W, H, RIVER = 18, 28, 14.0
 LANES = (4, 14)
 
 CARDS: Dict[str, Dict[str, Any]] = {
-    "knight": dict(name="Knight", cost=3, count=1, hp=900, dmg=120, cd=1.0, range=0.6, speed=2.0, r=0.55),
+    "warrior": dict(name="Warrior", cost=3, count=1, hp=900, dmg=120, cd=1.0, range=0.6, speed=2.0, r=0.55),
     "archers": dict(name="Archers", cost=3, count=2, hp=220, dmg=70, cd=0.9, range=4.5, speed=2.0, r=0.38),
-    "swarm": dict(name="Swarm", cost=2, count=4, hp=70, dmg=45, cd=0.8, range=0.5, speed=2.8, r=0.26),
-    "giant": dict(name="Giant", cost=5, count=1, hp=2200, dmg=170, cd=1.4, range=0.6, speed=1.4, r=0.8, bo=True),
-    "bomber": dict(name="Bomber", cost=3, count=1, hp=200, dmg=130, cd=1.5, range=4.0, speed=2.0, r=0.4, splash=1.6),
+    "goblins": dict(name="Goblins", cost=2, count=4, hp=70, dmg=45, cd=0.8, range=0.5, speed=2.8, r=0.26),
+    "brute": dict(name="Brute", cost=5, count=1, hp=2200, dmg=170, cd=1.4, range=0.6, speed=1.4, r=0.8, bo=True),
+    "dynamiter": dict(name="Dynamiter", cost=3, count=1, hp=200, dmg=130, cd=1.5, range=4.0, speed=2.0, r=0.4, splash=1.6),
 }
-DECK = ["knight", "archers", "giant", "swarm", "bomber"]
+DECK = ["warrior", "archers", "brute", "goblins", "dynamiter"]
 # How long a side with nothing affordable waits before checking again (no model call).
 IDLE_RECHECK = 0.25
 # A troop this many tiles from its own king, or closer, is on its own half (river + 2.5).
@@ -56,6 +56,8 @@ class SimConfig:
     elixir_rate: float = 1.0
     tower_hp: int = 3800
     king_hp: int = 6000
+    # Least time between one side's model calls. 0 asks again as soon as an answer lands.
+    min_interval: float = 0.0
 
 
 @dataclass
@@ -85,6 +87,7 @@ class Side:
     last_error: Optional[str] = None
     # Recent answers as {s: asked at, a: applied at, c: card or None}, for the viewer's decision rail.
     log: List[Dict[str, Any]] = field(default_factory=list)
+    next_ask: float = 0.0
 
 
 def _dist(a: Dict[str, Any], b: Dict[str, Any]) -> float:
@@ -151,7 +154,7 @@ class Sim:
         enemies = [u for u in self.units if u["side"] == foe and u["lane"] == lane and self._on_own_half(side, u)]
         if enemies:
             return {"spot": "defend", "ids": [u["id"] for u in enemies]}
-        if any(u["side"] == side and u["lane"] == lane and u["type"] in ("giant", "knight") for u in self.units):
+        if any(u["side"] == side and u["lane"] == lane and u["type"] in ("brute", "warrior") for u in self.units):
             return {"spot": "support"}
         return {"spot": "bridge"}
 
@@ -187,6 +190,10 @@ class Sim:
         if not self.affordable(side):
             s.pending = {"auto": True, "start": self.t, "due": self.t + IDLE_RECHECK}
             return
+        if self.t < s.next_ask:
+            s.pending = {"auto": True, "start": self.t, "due": s.next_ask}
+            return
+        s.next_ask = self.t + self.cfg.min_interval
         self._rid += 1
         # Placement is fixed by the board at the moment of asking, so a slow answer is a late answer.
         # The troops as they stood when asked: the board a slow answer is still responding to.
@@ -256,7 +263,7 @@ class Sim:
                 return lx, p["y"] + f * 2.6
             return 9 + (lx - 9) * 0.45, k["y"] + f * 3.2
         if spot == "support":
-            leads = [u for u in self.units if u["side"] == side and u["lane"] == lane and u["type"] in ("giant", "knight")]
+            leads = [u for u in self.units if u["side"] == side and u["lane"] == lane and u["type"] in ("brute", "warrior")]
             if leads:
                 lead = leads[0]
                 for u in leads:

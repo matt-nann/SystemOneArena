@@ -10,16 +10,16 @@ from mock_openrouter.app import MockSettings, build_app
 
 @pytest.fixture
 def snap() -> Dict[str, Any]:
-    """A board snapshot from one side's point of view: 4 elixir, so Giant (5) is not an option."""
+    """A board snapshot from one side's point of view: 4 elixir, so Brute (5) is not an option."""
     return {
         "timeLeft": 42,
         "elixir": 4,
-        "hand": ["knight", "giant", "swarm", "archers"],
+        "hand": ["warrior", "brute", "goblins", "archers"],
         "crowns": {"you": 0, "opponent": 1},
         "kings": {"your_hp": 6000, "their_hp": 6000},
         "lanes": [
             {"your_tower_hp": 3800, "their_tower_hp": 1200, "your_troops": [],
-             "their_troops": [{"type": "giant", "hp": 2000, "tiles_from_your_king": 6.0}], "enemy_troops_on_your_side": 1},
+             "their_troops": [{"type": "brute", "hp": 2000, "tiles_from_your_king": 6.0}], "enemy_troops_on_your_side": 1},
             {"your_tower_hp": 0, "their_tower_hp": 3800, "your_troops": [], "their_troops": [], "enemy_troops_on_your_side": 0},
         ],
     }

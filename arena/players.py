@@ -29,10 +29,10 @@ class Move:
     request: Dict[str, Any] = field(default_factory=dict)
 
 
-def jev_request(settings: Settings, snap: Dict[str, Any]) -> Dict[str, Any]:
+def jev_request(settings: Settings, snap: Dict[str, Any], model: Optional[str] = None) -> Dict[str, Any]:
     q = game.questions(snap)
     return {
-        "model": settings.JEV_MODEL,
+        "model": model or settings.JEV_MODEL,
         "state": game.state(snap),
         "questions": {name: {"type": "choice", "instructions": v["instructions"], "criteria": v["options"]}
                       for name, v in q.items()},
@@ -69,9 +69,11 @@ class Players:
     def roster(self) -> list:
         """Index 0 is the bottom (blue) side, index 1 the top (red) side."""
         s = self.settings
+        sol_fast = s.SOL_API == "decisions"
         return [
-            {"id": "jev", "name": s.JEV_NAME, "model": s.JEV_MODEL, "effort": None},
-            {"id": "sol", "name": s.SOL_NAME, "model": s.SOL_MODEL, "effort": s.SOL_REASONING_EFFORT or None},
+            {"id": "jev", "name": s.JEV_NAME, "model": s.JEV_MODEL, "effort": None, "role": "Fast decision model"},
+            {"id": "sol", "name": s.SOL_NAME, "model": s.SOL_MODEL, "effort": None if sol_fast else (s.SOL_REASONING_EFFORT or None),
+             "role": "Fast decision model" if sol_fast else "Frontier model"},
         ]
 
     async def decide(self, who: str, snap: Dict[str, Any]) -> Move:
@@ -79,15 +81,17 @@ class Players:
         if not game.affordable(snap):
             raise game.InvalidMove("no affordable card: nothing to decide")
         if who == "jev":
-            return await self._jev(snap)
+            return await self._decisions(snap, self.settings.JEV_MODEL, self.settings.JEV_TIMEOUT_SECONDS)
         if who == "sol":
+            if self.settings.SOL_API == "decisions":
+                return await self._decisions(snap, self.settings.SOL_MODEL, self.settings.SOL_TIMEOUT_SECONDS)
             return await self._sol(snap)
         raise ValueError(f"unknown player {who!r}")
 
-    async def _jev(self, snap: Dict[str, Any]) -> Move:
-        body = jev_request(self.settings, snap)
+    async def _decisions(self, snap: Dict[str, Any], model: str, timeout: float) -> Move:
+        body = jev_request(self.settings, snap, model)
         t0 = time.perf_counter()
-        raw = await self.client.decide(body, timeout=self.settings.JEV_TIMEOUT_SECONDS)
+        raw = await self.client.decide(body, timeout=timeout)
         ms = (time.perf_counter() - t0) * 1000
         answers = raw.get("answers") or {}
         if "card" not in answers or "lane" not in answers:

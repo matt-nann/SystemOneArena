@@ -1,8 +1,4 @@
-"""Every environment variable the arena reads (pydantic-settings, as in Aven).
-
-The OpenRouter names match Aven's ``packages/llm/config.py`` so one ``.env``
-works for both.
-"""
+"""Every environment variable the arena reads (pydantic-settings), from the environment or ``.env``."""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -13,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # ── OpenRouter (same names as Aven) ──────────────────────────────
+    # ── OpenRouter ──────────────────────────────
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_DECISIONS_URL: str = "https://openrouter.ai/api/alpha/decisions"

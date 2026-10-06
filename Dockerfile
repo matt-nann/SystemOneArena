@@ -1,4 +1,4 @@
-# Same shape as Aven's service images (services/sandbox-service/Dockerfile).
+# The arena service: dependencies installed with uv in a build stage, then a slim runtime image.
 # --- Build stage: install Python deps with uv ---
 FROM python:3.12-slim AS builder
 

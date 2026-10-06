@@ -69,7 +69,7 @@ async def test_profiles_set_latency_and_error_rate(settings, snap):
 
 @pytest.mark.asyncio
 async def test_admin_api_and_generic_requests(mock_app):
-    """Admin endpoints, auth, and requests that are not arena moves (so Aven's client works too)."""
+    """Admin endpoints, auth, and requests that are not arena moves (so any OpenRouter client works)."""
     async with httpx.AsyncClient(transport=transport(mock_app), base_url="http://mock") as http:
         assert (await http.post("/api/v1/chat/completions", json={"model": "m"})).status_code == 401
         auth = {"Authorization": "Bearer k"}

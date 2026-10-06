@@ -212,12 +212,12 @@ function hpBar(x,y,w,h,frac,side,num){
 function bubble(x,y,w,h,r,tx,ty,tw){const cy=y+h/2;ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
   ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);
   ctx.lineTo(x,cy+tw);ctx.lineTo(tx,ty);ctx.lineTo(x,cy-tw);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath()}
-// Tower health, Clash style: a team badge (crown or turret) on the left, a glossy fill, the number on top, and a
+// Tower health: a team badge (crown or turret) on the left, a glossy fill, the number on top, and a
 // yellow trail that drains away after each hit so damage is visible at a glance.
 const TRAIL={};let trailClock=0;
 function towerBar(t,clock){
   const king=t.kind==='K',bw=(king?3.6:3.0)*U,bh=0.62*U,frac=Math.max(0,t.hp/t.max),key=t.side+t.kind;
-  // Bars sit just above each tower, as in Clash; the top king's castle reaches the board's edge, so its bar stays there.
+  // Bars sit just above each tower; the top king's castle reaches the board's edge, so its bar stays there.
   const y=king?(t.side===1?0.12*U:(t.y-2.55)*U):(t.y-2.9)*U;
   const tr=TRAIL[key];if(!tr||frac>tr.v)TRAIL[key]={v:frac};else tr.v=Math.max(frac,tr.v-Math.max(0,clock-trailClock)*0.9);
   const x0=t.x*U-bw/2,r=bh*0.45,tc=TC[t.side];

@@ -12,7 +12,7 @@ reasoning, through chat completions with a strict JSON schema), played on 6 Octo
 Per call Jev cost $0.000065 and Sol $0.0039 (61×); for the whole match Jev cost 21× less. Settings: a 45-second
 cap, world pace 1.25 (`MATCH_PACE`: troops, attacks, tower fire and elixir 25% faster, while the clock and every
 latency stay in real seconds), at most one decision per side per second, and a 1.5-second pre-roll for the
-start banner (now 2 seconds).
+start banner.
 
 ## Jev vs Luna
 

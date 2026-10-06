@@ -1,8 +1,7 @@
 """Mock OpenRouter: the same paths and wire format as the real API.
 
-Follows Aven's ``tests/stubs/llm`` pattern (FIFO scripts plus ``/admin/*``),
-but speaks OpenRouter itself, so any OpenRouter client works against it
-unchanged, the arena's and Aven's ``packages/llm`` alike:
+Scripted responses (FIFO, per model) plus ``/admin/*`` controls, speaking
+OpenRouter's own format, so any OpenRouter client works against it unchanged:
 
     POST /api/v1/chat/completions    OpenAI-compatible chat (json_schema honoured)
     POST /api/alpha/decisions        Decisions (noul / choice / score)
@@ -254,7 +253,7 @@ def build_app(settings: Optional[MockSettings] = None) -> FastAPI:
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
 
-    # ── admin (Aven stub pattern) ────────────────────────────────────
+    # ── admin ────────────────────────────────────
     @app.post("/admin/script")
     async def script(body: ScriptBody) -> Dict[str, Any]:
         q = st.scripts.setdefault(body.model, deque())

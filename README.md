@@ -5,7 +5,16 @@
 - **Jev**: TypeSafe's "System One" decision model (`typesafe/jev-1.13`), called through OpenRouter's Decisions endpoint.
 - **Sol**: an OpenRouter chat model (default `openai/gpt-6-sol`; set `SOL_MODEL`), called through chat completions with a strict JSON schema.
 
-The stack follows [Aven](https://github.com/matt-nann/aven): Python with uv, a FastAPI service shaped like `services/sandbox-service`, pydantic-settings, httpx and the openai SDK for OpenRouter (mirroring `packages/llm`), SSE via `StreamingResponse` (as in `brain-backend`), pytest + respx, and a Dockerfile.
+## Results
+
+Real matches, every move a live OpenRouter call, archived in full in [`matches/`](matches/README.md). Both sides got the same brief and the same options, and each was limited to one decision per second.
+
+| Opponent | Result | Avg decision, Jev vs opponent | Cost per decision, Jev vs opponent |
+| --- | --- | --- | --- |
+| Sol (`openai/gpt-6-sol`) | Jev won 3–0, king tower at 28.7s | 0.20s vs 4.0s | $0.000065 vs $0.0039 (61×) |
+| Luna (`openai/gpt-6-luna`), 3 matches | Jev won all three | 0.17–0.18s vs 4.2–5.5s | about $0.000067 vs $0.0002 (3×) |
+
+The stack: Python with uv, a FastAPI service, pydantic-settings, httpx and the openai SDK for OpenRouter, server-sent events for the live view, pytest + respx, and a Dockerfile.
 
 ## Architecture
 
@@ -70,7 +79,7 @@ That is at most 60 calls a match (about 50 in practice). Each match's result in 
 
 ## Mock OpenRouter
 
-`mock_openrouter/` stands in for OpenRouter itself. It serves the same paths and wire format (`POST /api/v1/chat/completions`, `POST /api/alpha/decisions`, `GET /api/v1/models`), so the real client code runs unchanged against it. It follows the pattern of Aven's `tests/stubs/llm`, scripted responses plus `/admin/*`, but speaks OpenRouter's format instead of Aven's internal one, and it also covers Decisions.
+`mock_openrouter/` stands in for OpenRouter itself. It serves the same paths and wire format (`POST /api/v1/chat/completions`, `POST /api/alpha/decisions`, `GET /api/v1/models`), so the real client code runs unchanged against it. It answers from scripted responses or per-model latency profiles, with `/admin/*` controls, and covers both chat completions and Decisions.
 
 **In-process** (no second process, no key):
 
@@ -80,7 +89,7 @@ OPENROUTER_MOCK=true uv run python -m arena
 
 The OpenRouter client gets an httpx transport that answers every request inside the process.
 
-**Over HTTP** (for anything that speaks OpenRouter, including Aven's `packages/llm`):
+**Over HTTP** (for anything that speaks OpenRouter):
 
 ```sh
 uv run python -m mock_openrouter       # http://localhost:8790
@@ -135,7 +144,7 @@ The same image runs the mock: start it with `python -m mock_openrouter`.
 - **A start banner** names the two sides with each model's speed. It holds over a frozen board for 2 seconds (the pre-roll), the match starts underneath it, and it clears at 4 seconds.
 - **Captions** narrate the match in plain language ("Sol is still thinking. The match clock keeps running.", "Tower down at 0:32. Jev leads 1–0.") and shrink to fit.
 - **A panel per player**: name, model, the decision time (yellow and counting up while a call is out), the elixir bar with the point still charging, elixir wasted, and a 10-second decision rail where each answer is a tick, a tick with a pink dot played a card, and the yellow bar is the call still out.
-- **On the board**: Tiny Swords units and buildings, Clash-style tower health bars with a damage trail, a thinking bubble beside a king whose model is still out, and each deployed card's elixir cost and decision time.
+- **On the board**: Tiny Swords units and buildings, tower health bars with a team badge and a damage trail, a thinking bubble beside a king whose model is still out, and each deployed card's elixir cost and decision time.
 - **An end card** with the winner, decision times, decisions made, troops never played, towers taken, cost per 1,000 decisions, and the record across archived matches between the same two models.
 
 It runs in three modes, with the same drawing code:
@@ -183,3 +192,7 @@ The suite runs without network. It covers the frame fields the viewer draws (dec
 | `tools/archive.py`, `tools/rerun.py`, `tools/record.py` | Archive a match, re-simulate it from its log, record it as video |
 | `matches/` | Recorded matches committed to the repo |
 | `tools/jev_probe.py` | Asks Jev about hand-made boards and scores its answers, for tuning the wording cheaply |
+
+## Credits
+
+Art: [Tiny Swords](https://pixelfrog-assets.itch.io/tiny-swords) by Pixel Frog (CC0). Inspired by Clash Royale; not affiliated with or endorsed by Supercell. Clash Royale is a trademark of Supercell Oy.

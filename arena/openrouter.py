@@ -1,10 +1,9 @@
 """OpenRouter client: the two calls the arena makes.
 
-* ``decide`` — OpenRouter's Decisions endpoint (alpha), for Jev. Mirrors
-  Aven's ``packages/llm/decisions.py`` (httpx, Bearer key, attribution headers).
+* ``decide`` — OpenRouter's Decisions endpoint (alpha), for Jev: httpx, a Bearer
+  key and OpenRouter's attribution headers.
 * ``chat_structured`` — chat completions with a strict JSON schema and
-  ``provider.require_parameters``, for Sol. Mirrors the OpenRouter structured
-  path in Aven's ``packages/llm/service.py`` (openai SDK pointed at OpenRouter).
+  ``provider.require_parameters``, for Sol: the openai SDK pointed at OpenRouter.
 
 Both go through one ``httpx.AsyncClient``. Pass a ``transport`` to swap the
 network out: ``mock_openrouter.transport()`` answers every request in-process.

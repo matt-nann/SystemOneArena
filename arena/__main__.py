@@ -1,4 +1,4 @@
-"""Run the arena service: `python -m arena` (same shape as Aven's sandbox-service)."""
+"""Run the arena service: `python -m arena`."""
 from __future__ import annotations
 
 import contextlib

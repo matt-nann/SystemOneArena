@@ -4,7 +4,7 @@
     GET  /static/*               viewer script, demo engine, Tiny Swords art (web/)
     GET  /health, /ready
     GET  /api/config             players, models, whether this viewer may start a match
-    GET  /api/stream             SSE: one `frame` event per streamed frame (Aven's brain-backend pattern)
+    GET  /api/stream             SSE: one `frame` event per streamed frame
     POST /api/matches            start a match (Bearer ARENA_ADMIN_TOKEN when one is set)
     GET  /api/matches            recorded matches and their results
     GET  /api/matches/{id}/frames    a recorded match's frames, for replay

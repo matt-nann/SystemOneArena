@@ -449,7 +449,9 @@ class Sim:
             sides.append({
                 "elixir": r(s.elixir), "wasted": round(s.wasted, 2), "decisions": s.decisions, "crowns": s.crowns,
                 "errors": s.errors, "thinking_since": r(s.pending["start"]) if thinking else None,
-                "last": {"card": s.last["card"], "why": s.last["why"], "lat": r(s.last["lat"])} if s.last else None,
+                "hand": list(s.hand), "next": s.queue[0] if s.queue else None,
+                "last": {"card": s.last["card"], "lane": s.last["lane"], "why": s.last["why"], "lat": r(s.last["lat"]),
+                         "at": r(s.last["at"])} if s.last else None,
                 "last_error": s.last_error,
                 "avg": r(sum(s.lats[-6:]) / len(s.lats[-6:])) if s.lats else None,
                 "recent": [d for d in s.log if self.t - d["a"] <= 10.5],

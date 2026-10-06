@@ -206,13 +206,18 @@ function hpBar(x,y,w,h,frac,side,num){
   if(frac>0){rr(x-w/2,y,Math.max(h*0.6,w*frac),h,h*0.4);fs(TC[side].m,0)}
   if(num!=null)label(String(num),x,y+h*0.55,h*1.45,'#fff',h*0.45);
 }
+// A speech bubble as one path: a rounded box with a tail on its left edge pointing at (tx, ty), so it has one
+// clean outline and no seam where the tail joins.
+function bubble(x,y,w,h,r,tx,ty,tw){const cy=y+h/2;ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,cy+tw);ctx.lineTo(tx,ty);ctx.lineTo(x,cy-tw);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath()}
 // Tower health, Clash style: a team badge (crown or turret) on the left, a glossy fill, the number on top, and a
 // yellow trail that drains away after each hit so damage is visible at a glance.
 const TRAIL={};let trailClock=0;
 function towerBar(t,clock){
   const king=t.kind==='K',bw=(king?3.6:3.0)*U,bh=0.62*U,frac=Math.max(0,t.hp/t.max),key=t.side+t.kind;
-  // Bars sit on the far side from the fighting: above Sol's towers, below Jev's.
-  const y=king?(t.side===1?0.12*U:(H-0.12)*U-bh):t.side===1?(t.y-2.9)*U:(t.y+1.15)*U;
+  // Bars sit just above each tower, as in Clash; the top king's castle reaches the board's edge, so its bar stays there.
+  const y=king?(t.side===1?0.12*U:(t.y-2.55)*U):(t.y-2.9)*U;
   const tr=TRAIL[key];if(!tr||frac>tr.v)TRAIL[key]={v:frac};else tr.v=Math.max(frac,tr.v-Math.max(0,clock-trailClock)*0.9);
   const x0=t.x*U-bw/2,r=bh*0.45,tc=TC[t.side];
   rr(x0,y,bw,bh,r);fs('#241c38',OL,Math.max(2,0.11*U));
@@ -310,8 +315,7 @@ function draw(S,clock){
     if(!sd||S.over||sd.thinking_since==null||!kt.alive)continue;const el=S.t-sd.thinking_since;if(el<0.6)continue;
     const bx=14.1,by=i===1?1.45:H-1.45;ctx.setTransform(U,0,0,U,OX,0);
     // ring on the left with padding, the seconds left-aligned after a clear gap
-    ctx.beginPath();ctx.moveTo(bx-2.2,by-0.4);ctx.lineTo(bx-3.0,by);ctx.lineTo(bx-2.2,by+0.4);ctx.closePath();fs('#fff',OL,0.12);
-    rr(bx-2.3,by-0.9,4.6,1.8,0.6);fs('#fff',OL,0.12);ctx.fillStyle='#fff';ctx.fillRect(bx-2.36,by-0.33,0.18,0.66);
+    bubble(bx-2.3,by-0.9,4.6,1.8,0.6,bx-3.0,by,0.4);fs('#fff',OL,0.12);
     ctx.beginPath();ctx.arc(bx-1.45,by,0.5,-Math.PI/2,-Math.PI/2+TAU*Math.min(1,el/8));ctx.strokeStyle=TC[i].m;ctx.lineWidth=0.2;ctx.stroke();
     ctx.setTransform(1,0,0,1,OX,0);
     ctx.font=`800 ${0.9*U}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle=TC[i].d;ctx.fillText(el.toFixed(1)+'s',(bx-0.65)*U,(by+0.05)*U)}

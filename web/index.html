@@ -59,10 +59,10 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 /* elixir: one continuous bar with segment marks, a big drop for the count, and a leak badge that catches what spills off the full bar */
 .elx{display:grid;grid-template-columns:1fr auto;align-items:center;gap:16px;min-width:0}
 .tank{position:relative;display:flex;align-items:center;min-width:0}
-.drop{width:56px;height:60px;flex:none;position:relative;z-index:2;margin-right:-26px;display:grid;place-items:center;font-family:var(--display);font-size:30px;color:#fff;
-  text-shadow:0 3px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-.drop::before{content:"";position:absolute;inset:9px 7px 4px;background:radial-gradient(circle at 35% 35%,#ffc2fd,var(--elixir) 55%,#b52bb3);border:4px solid var(--outline);border-radius:60% 0 60% 60%;transform:rotate(-45deg)}
-.drop span{position:relative;padding-top:6px}
+.drop{width:56px;height:68px;flex:none;position:relative;z-index:2;margin-right:-24px;display:grid;place-items:center;font-family:var(--display);font-size:33px;color:#fff;
+  text-shadow:0 3px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline);filter:drop-shadow(0 3px 0 rgba(18,15,36,.45))}
+.drop svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.drop span{position:relative;padding-top:15px;line-height:1}
 .bar{position:relative;flex:1;height:36px;border:4px solid var(--outline);border-radius:12px;background:#2a1636;overflow:hidden;box-shadow:inset 0 3px 0 rgba(0,0,0,.35)}
 .bar .fill{position:absolute;inset:0 0 0 26px;transform-origin:left;transform:scaleX(.5);
   background:linear-gradient(180deg,#ffc2fd 0%,#ff6cf9 35%,var(--elixir) 60%,#c42fc2 100%)}
@@ -80,12 +80,14 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 .leak{display:flex;align-items:center;gap:10px;flex:none}
 .leak .ll{font-family:var(--display);font-size:21px;line-height:.95;text-align:right;color:#fff;
   text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-.splash{position:relative;width:70px;height:58px;display:grid;place-items:center}
-.splash svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.splash path{fill:#7a5a86;stroke:var(--outline);stroke-width:4;stroke-linejoin:round;transition:fill .3s}
-.splash b{position:relative;padding-top:12px;font-family:var(--display);font-weight:400;font-size:25px;color:#fff;font-variant-numeric:tabular-nums;
+.splash{position:relative;width:70px;height:62px;display:grid;place-items:center;--drop-fill:url(#elxGrey)}
+.splash svg{position:absolute;overflow:visible}
+.splash .dr{left:12px;top:0;width:46px;height:58px;filter:drop-shadow(0 3px 0 rgba(18,15,36,.45))}
+.splash .sp{inset:0;width:100%;height:100%;fill:#8a7899;stroke:var(--outline);stroke-width:2.4;opacity:.0;transition:opacity .3s}
+.splash b{position:relative;padding-top:16px;line-height:1;font-family:var(--display);font-weight:400;font-size:21px;color:#fff;font-variant-numeric:tabular-nums;
   text-shadow:0 2px var(--outline),2px 0 var(--outline),-2px 0 var(--outline),0 -2px var(--outline)}
-.leak.on .splash path{fill:var(--elixir)}
+.leak.on .splash{--drop-fill:url(#elxBody)}
+.leak.on .splash .sp{opacity:1;fill:var(--elixir)}
 .leak.bump .splash{animation:bump .25s ease-out}
 @keyframes bump{40%{transform:scale(1.12)}}
 .tl{font-size:14px;font-weight:700;color:rgba(255,255,255,.72);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
@@ -159,7 +161,17 @@ body.clean .viewport{padding:0;gap:0}
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="crown" viewBox="0 0 24 20"><path d="M2 17V5l5 5 5-8 5 8 5-5v12z"/></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+  <linearGradient id="elxBody" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#ffb3fd"/><stop offset=".45" stop-color="#f255f0"/><stop offset="1" stop-color="#a51fb0"/></linearGradient>
+  <linearGradient id="elxGrey" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#b8a9c4"/><stop offset=".5" stop-color="#8a7899"/><stop offset="1" stop-color="#5d4d6d"/></linearGradient>
+</defs>
+<symbol id="crown" viewBox="0 0 24 20"><path d="M2 17V5l5 5 5-8 5 8 5-5v12z"/></symbol>
+<symbol id="drop" viewBox="0 0 40 50"><path d="M20 3C20 3 5.5 19.5 5.5 31a14.5 14.5 0 0 0 29 0C34.5 19.5 20 3 20 3Z" style="fill:var(--drop-fill,url(#elxBody))" stroke="#120f24" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M9.5 33a10.5 10.5 0 0 0 21 0" fill="none" stroke="rgba(60,0,70,.28)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M12.5 29c.5-5 3-9.5 6-13" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="3.2" stroke-linecap="round"/>
+  <circle cx="11.6" cy="34" r="1.8" fill="#fff" fill-opacity=".75"/></symbol>
+</svg>
 <div class="viewport">
   <div class="holder" id="holder">
     <main class="frame" id="frame" aria-label="Sol versus Jev, a real-time arena match">
@@ -174,13 +186,13 @@ body.clean .viewport{padding:0;gap:0}
           <div class="idn"><div class="name" id="nm1">Sol</div><div class="meta"><span class="role">Frontier model</span><span class="model" id="md1">openai/gpt-6-sol</span></div></div>
           <div class="status" id="st1"><span class="lbl">ready</span><span class="num">0.0s</span></div>
         </div>
-        <div class="elx"><div class="tank" id="tk1"><div class="drop"><span id="ex1">5</span></div><div class="bar" id="pp1"><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk1"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg viewBox="0 0 76 64" aria-hidden="true"><path d="M38 3C38 3 18 22 12 34c-7 14 4 27 26 27s33-13 26-27C58 22 38 3 38 3z M8 14a4 4 0 1 0 0.1 0z M68 12a3.5 3.5 0 1 0 0.1 0z"/></svg><b>0.0</b></span></div></div>
+        <div class="elx"><div class="tank" id="tk1"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex1">5</span></div><div class="bar" id="pp1"><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk1"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg class="sp" viewBox="0 0 70 58" aria-hidden="true"><circle cx="9" cy="40" r="3.4"/><circle cx="62" cy="44" r="3"/><circle cx="57" cy="14" r="2.4"/></svg><svg class="dr" aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><b>0.0</b></span></div></div>
         <div class="tape"><canvas id="tp1" aria-hidden="true"></canvas><div class="tally"><span class="count" id="dc1">0</span><span class="tl">decisions</span></div></div>
         </section>
         <div class="field" id="field"><canvas id="cv" role="img" aria-label="Arena: Sol's towers at the top, Jev's at the bottom"></canvas></div>
         <section class="hud jev" aria-label="Jev">
         <div class="tape"><canvas id="tp0" aria-hidden="true"></canvas><div class="tally"><span class="count" id="dc0">0</span><span class="tl">decisions</span></div></div>
-        <div class="elx"><div class="tank" id="tk0"><div class="drop"><span id="ex0">5</span></div><div class="bar" id="pp0"><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk0"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg viewBox="0 0 76 64" aria-hidden="true"><path d="M38 3C38 3 18 22 12 34c-7 14 4 27 26 27s33-13 26-27C58 22 38 3 38 3z M8 14a4 4 0 1 0 0.1 0z M68 12a3.5 3.5 0 1 0 0.1 0z"/></svg><b>0.0</b></span></div></div>
+        <div class="elx"><div class="tank" id="tk0"><div class="drop"><svg aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><span id="ex0">5</span></div><div class="bar" id="pp0"><b class="fill"></b><span class="marks"></span></div><span class="drips" aria-hidden="true"><i></i><i></i><i></i></span></div><div class="leak" id="lk0"><span class="ll">Elixir<br>leaked</span><span class="splash"><svg class="sp" viewBox="0 0 70 58" aria-hidden="true"><circle cx="9" cy="40" r="3.4"/><circle cx="62" cy="44" r="3"/><circle cx="57" cy="14" r="2.4"/></svg><svg class="dr" aria-hidden="true"><use href="#drop" width="100%" height="100%"/></svg><b>0.0</b></span></div></div>
         <div class="who">
           <div class="idn"><div class="name" id="nm0">Jev</div><div class="meta"><span class="role">Fast decision model</span><span class="model" id="md0">typesafe/jev-1.13</span></div></div>
           <div class="status" id="st0"><span class="lbl">ready</span><span class="num">0.0s</span></div>

@@ -37,12 +37,12 @@ const ready=i=>i.complete&&i.naturalWidth>0;
 const TEAM=['blue','red'];
 // Each card's sprite sheet: rows by animation, 192px cells; ax/ay is where the feet sit in a cell.
 const UNIT={
-  knight: {sheet:'warrior',ax:101,ay:136,scale:1.0,idle:[0,6],run:[1,6],atk:{right:[2,6],down:[4,6],up:[6,6]},atkDur:0.45,tall:92},
+  knight: {sheet:'warrior',ax:101,ay:136,scale:1.45,box:[62,45,80,91],idle:[0,6],run:[1,6],atk:{right:[2,6],down:[4,6],up:[6,6]},atkDur:0.45,tall:92},
   // The giant only hits buildings: a pawn at 2.2x that hammers the tower.
-  giant:  {sheet:'pawn',ax:96,ay:128,scale:2.2,idle:[0,6],run:[1,6],atk:{right:[2,6],down:[2,6],up:[2,6]},atkDur:0.6,tall:59},
-  archers:{sheet:'archer',ax:99,ay:134,scale:0.92,idle:[0,6],run:[1,6],atk:{right:[4,8],down:[6,8],up:[2,8]},atkDur:0.6,tall:76},
-  swarm:  {sheet:'torch',ax:90,ay:133,scale:0.72,idle:[0,7],run:[1,6],atk:{right:[2,6],down:[3,6],up:[4,6]},atkDur:0.4,tall:80},
-  bomber: {sheet:'tnt',ax:100,ay:135,scale:0.86,idle:[0,6],run:[1,6],atk:{right:[2,7],down:[2,7],up:[2,7]},atkDur:0.6,tall:68},
+  giant:  {sheet:'pawn',ax:96,ay:128,scale:3.0,box:[66,69,60,59],idle:[0,6],run:[1,6],atk:{right:[2,6],down:[2,6],up:[2,6]},atkDur:0.6,tall:59},
+  archers:{sheet:'archer',ax:99,ay:134,scale:1.35,box:[66,59,67,75],idle:[0,6],run:[1,6],atk:{right:[4,8],down:[6,8],up:[2,8]},atkDur:0.6,tall:76},
+  swarm:  {sheet:'torch',ax:90,ay:133,scale:1.05,box:[51,44,76,89],idle:[0,7],run:[1,6],atk:{right:[2,6],down:[3,6],up:[4,6]},atkDur:0.4,tall:80},
+  bomber: {sheet:'tnt',ax:100,ay:135,scale:1.25,box:[57,67,88,68],idle:[0,6],run:[1,6],atk:{right:[2,7],down:[2,7],up:[2,7]},atkDur:0.6,tall:68},
 };
 const CARD_COST={knight:3,archers:3,giant:5,swarm:2,bomber:3};
 const FOOT={knight:0.5,archers:0.4,swarm:0.32,giant:0.75,bomber:0.42};
@@ -80,21 +80,60 @@ function strip(name,cw,ch,i,ax,ay,x,y,k,alpha){const im=img(name);if(!ready(im))
 function paintLand(){
   land.width=cv.width;land.height=cv.height;const g=land.getContext('2d');g.imageSmoothingEnabled=false;
   const T=U,top=(RIVER-1)*U,bot=(RIVER+1)*U;
-  // grass: a flat two-tone checker, tinted toward each side's colour, with a bank along the river
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const yy=y*U;if(yy+U>top&&yy<bot)continue;g.fillStyle=(x+y)%2?'#6cb346':'#63aa40';g.fillRect(x*U,yy,U+1,U+1)}
+  // grass and dirt lanes: a pixel-art texture generated once (see groundTexture), scaled up crisp
+  g.drawImage(groundTexture(),0,0,land.width,land.height);
   g.clearRect(0,top,land.width,bot-top);
-  g.fillStyle='rgba(242,74,64,.06)';g.fillRect(0,0,land.width,top);g.fillStyle='rgba(61,139,255,.07)';g.fillRect(0,bot,land.width,land.height-bot);
-  g.fillStyle='#4f8a34';g.fillRect(0,top-0.18*U,land.width,0.18*U);g.fillStyle='#3f7a2c';g.fillRect(0,bot,land.width,0.12*U);
-  // dirt lanes: a darker rim, then flat sand, over the union of the lane rects
-  const rects=[];const R=(x0,y0,x1,y1)=>rects.push([x0*U,y0*U,(x1-x0)*U,(y1-y0)*U]);
-  for(const lx of LANES){R(lx-0.8,5.5,lx+0.8,RIVER-1.05);R(lx-0.8,RIVER+1.05,lx+0.8,22.5)}
-  R(4,4.7,14,6.3);R(4,21.7,14,23.3);R(8.2,2.4,9.8,5.5);R(8.2,22.5,9.8,25.6);
-  g.fillStyle='#b39a5c';for(const[x,y,w,h]of rects)g.fillRect(x-0.14*U,y-0.14*U,w+0.28*U,h+0.28*U);
-  g.fillStyle='#dcc98f';for(const[x,y,w,h]of rects)g.fillRect(x,y,w,h);
+  g.fillStyle='rgba(242,74,64,.05)';g.fillRect(0,0,land.width,top);g.fillStyle='rgba(61,139,255,.06)';g.fillRect(0,bot,land.width,land.height-bot);
+  g.fillStyle='#4a8a33';g.fillRect(0,top-0.12*U,land.width,0.12*U);g.fillStyle='#3d7a2b';g.fillRect(0,bot,land.width,0.08*U);
   // decorations away from the lanes
   const dec=(n,x,y,k)=>{const d=img('decor/'+n);if(ready(d))g.drawImage(d,0,0,d.width,d.height,x*U-d.width*P*k/2,y*U-d.height*P*k,d.width*P*k,d.height*P*k)};
   for(const[n,x,y]of[['04',1.6,11.6],['07',16.6,11.7],['08',2.0,16.8],['09',15.9,17.2],['10',7.1,9.4],['11',11.2,19.0],['05',12.2,8.8],['04',6.4,19.6]])dec(n,x,y,1);
   ctx.save();const m=ctx;ctx=g;ctx.globalAlpha=0.3;label(NAMES[1].toUpperCase(),9*U,10*U,2.6*U,TC[1].l,0.35*U);label(NAMES[0].toUpperCase(),9*U,18*U,2.6*U,TC[0].l,0.35*U);ctx=m;ctx.restore();
+}
+/* Ground texture, drawn once at 32 texels per board tile (2 Tiny Swords pixels each) so it matches the sprites'
+   pixel scale. Grass: soft patches, tufts with light tips, a few flowers. Lanes: sand with speckles and pebbles,
+   a wobbly edge, a darker sand rim and a grass shadow. Seeded, so every match looks the same. */
+let GROUND=null;
+function groundTexture(){
+  if(GROUND)return GROUND;
+  const S=32,w=W*S,h=H*S,c=document.createElement('canvas');c.width=w;c.height=h;
+  const g=c.getContext('2d'),id=g.createImageData(w,h),px=id.data;
+  const hash=(x,y,k)=>{let n=(Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(k,1013904223))|0;n=Math.imul(n^(n>>>13),1274126177);return((n^(n>>>16))>>>0)/4294967296};
+  const smooth=(x,y,k)=>{const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
+    const a=hash(x0,y0,k),b=hash(x0+1,y0,k),c=hash(x0,y0+1,k),d=hash(x0+1,y0+1,k);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v};
+  const hex=s=>[parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16)];
+  const G=['#74b84a','#6caf44','#5e9f3b','#4f8f34','#8fca5a','#a8db70'].map(hex);   // grass: base, patch, shade, deep, light, tip
+  const D=['#e8cf8c','#dbbd74','#f3dfa3','#c49e5c','#b48a4a'].map(hex);             // sand: base, speckle, light, rim, pebble
+  const put=(x,y,col)=>{if(x<0||y<0||x>=w||y>=h)return;const i=(y*w+x)*4;px[i]=col[0];px[i+1]=col[1];px[i+2]=col[2];px[i+3]=255};
+  // lanes in texels, as boxes [cx, cy, half-width, half-height]
+  const boxes=[];const R=(x0,y0,x1,y1)=>boxes.push([(x0+x1)/2*S,(y0+y1)/2*S,(x1-x0)/2*S,(y1-y0)/2*S]);
+  for(const lx of LANES){R(lx-0.8,5.5,lx+0.8,RIVER-0.6);R(lx-0.8,RIVER+0.6,lx+0.8,22.5)}
+  R(4,4.75,14,6.25);R(4,21.75,14,23.25);R(8.25,2.4,9.75,5.5);R(8.25,22.5,9.75,25.6);
+  const kind=new Uint8Array(w*h);   // 0 grass, 1 grass shadow, 2 sand rim, 3 sand
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    let d=1e9;for(const[cx,cy,hw,hh]of boxes)d=Math.min(d,Math.max(Math.abs(x-cx)-hw,Math.abs(y-cy)-hh));
+    const wob=(smooth(x/7,y/7,3)-0.5)*5;   // ±2.5 texels of wobble along the edge
+    const k=d<wob-2?3:d<wob?2:d<wob+2?1:0,i=y*w+x;kind[i]=k;
+    if(k===3){const r=hash(x,y,5);put(x,y,r<0.06?D[1]:r<0.1?D[2]:D[0])}
+    else if(k===2)put(x,y,D[3]);
+    else if(k===1)put(x,y,G[3]);
+    else{const n=smooth(x/28,y/28,1),m=smooth(x/9,y/9,2);put(x,y,n>0.62?G[1]:n<0.3&&m>0.55?G[1]:G[0])}
+  }
+  // pebbles on the sand
+  for(let n=0;n<900;n++){const x=Math.floor(hash(n,1,7)*w),y=Math.floor(hash(n,2,7)*h);
+    if(kind[y*w+x]===3&&kind[y*w+x+1]===3){put(x,y,D[4]);put(x+1,y,D[4]);put(x,y-1,D[2])}}
+  // grass tufts: three blades with a dark base and light tips
+  for(let n=0;n<5200;n++){const x=Math.floor(hash(n,3,9)*w),y=Math.floor(hash(n,4,9)*h);
+    let ok=true;for(let dy=-3;dy<=1&&ok;dy++)for(let dx=-1;dx<=5;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=w||yy>=h||kind[yy*w+xx]!==0){ok=false;break}}
+    if(!ok)continue;
+    const big=hash(n,5,9)>0.7;
+    put(x,y,G[2]);put(x+2,y,G[2]);put(x+4,y,G[2]);put(x+1,y,G[3]);put(x+3,y,G[3]);
+    put(x,y-1,G[4]);put(x+2,y-1,G[2]);put(x+4,y-1,G[4]);put(x+2,y-2,G[4]);
+    if(big){put(x+2,y-3,G[5]);put(x,y-2,G[5]);put(x+4,y-2,G[5])}}
+  // a few flowers
+  for(let n=0;n<160;n++){const x=Math.floor(hash(n,6,11)*w),y=Math.floor(hash(n,7,11)*h);if(kind[y*w+x]!==0||kind[(y+1)*w+x]!==0)continue;
+    const col=hash(n,8,11)<0.5?[255,248,230]:[255,214,92];put(x,y,col);put(x-1,y,col);put(x+1,y,col);put(x,y-1,col);put(x,y,[240,170,60]);put(x,y+1,G[3])}
+  g.putImageData(id,0,0);GROUND=c;return c;
 }
 function drawWater(clock){
   const top=(RIVER-1.6)*U,h=3.2*U,wi=img('terrain/water');
@@ -207,8 +246,11 @@ function draw(S,clock){
       if(f.lat!=null){rr(-1.35,1.95,2.7,0.95,0.45);fs(f.side===0?TC[0].d:'#ffe066',OL,0.08)}
       ctx.setTransform(s,0,0,s,x-1.5*s,cy-1.6*s);ctx.beginPath();ctx.arc(0,0.12,0.58,-Math.PI*0.25,Math.PI*1.25);ctx.lineTo(0,-0.78);ctx.closePath();fs('#f255f0',OL,0.12);
       ctx.setTransform(1,0,0,1,0,0);
-      const A=UNIT[f.type];const k=s/U;
-      if(A){const Pk=P,cw=A.cw||192;P=Pk*k*0.85;cell(img(TEAM[f.side]+'/'+A.sheet),cw,cw,0,A.idle[0],A.ax,A.ay,x,cy+0.45*s,Math.min(A.scale,1.15),false,null);P=Pk}
+      const A=UNIT[f.type];
+      // portrait: the idle frame cropped to the character and fitted to the card's window
+      const pim=A&&img(TEAM[f.side]+'/'+A.sheet);
+      if(pim&&ready(pim)){const[bx,by,bw,bh]=A.box,cw=A.cw||192,fit=Math.min(2.3*s/bw,1.85*s/bh),dw=bw*fit,dh=bh*fit;
+        ctx.save();ctx.imageSmoothingEnabled=false;ctx.drawImage(pim,bx,A.idle[0]*cw+by,bw,bh,x-dw/2,cy-0.47*s-dh/2,dw,dh);ctx.restore()}
       label(f.label,x,cy+1.12*s,0.78*s,'#fff',0.2*s);
       label(String(CARD_COST[f.type]||''),x-1.5*s,cy-1.48*s,0.78*s,'#fff',0.22*s);
       if(f.lat!=null){ctx.font=`800 ${0.62*s}px ${MONO}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=f.side===0?'#fff':OL;ctx.fillText(f.lat.toFixed(f.lat<1?2:1)+'s',x,cy+2.44*s)}

@@ -99,8 +99,10 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);-w
 
 .tape{display:grid;grid-template-columns:1fr 150px;align-items:center;gap:14px;background:rgba(9,10,30,.42);border-radius:14px;padding:5px 0 5px 14px;box-shadow:inset 0 2px 0 rgba(0,0,0,.25)}
 .tape canvas{width:100%;height:42px;display:block}
-.tally{display:grid;justify-items:end;line-height:1;padding-right:2px}
-.count{font-family:var(--mono);font-weight:800;font-size:34px;font-variant-numeric:tabular-nums}
+/* label beside the count, not under it, so it fits the rail's height */
+.tally{display:flex;align-items:center;justify-content:flex-end;gap:10px;line-height:1;padding-right:14px}
+.tally .tl{order:-1;margin:0;text-align:right;line-height:1.05}
+.count{font-family:var(--mono);font-weight:800;font-size:36px;font-variant-numeric:tabular-nums}
 
 .field{position:relative;min-height:0;overflow:hidden}
 /* start-of-match banner over the board; viewer.js moves it from match time, so it records frame-exact */

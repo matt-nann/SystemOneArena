@@ -89,6 +89,15 @@ def _dist(a: Dict[str, Any], b: Dict[str, Any]) -> float:
     return math.hypot(a["x"] - b["x"], a["y"] - b["y"])
 
 
+def _facing(vx: float, vy: float, current: str) -> str:
+    """Which way a sprite faces for a movement or aim vector: up / down / left / right."""
+    if abs(vx) < 1e-6 and abs(vy) < 1e-6:
+        return current
+    if abs(vx) > abs(vy) * 1.3:
+        return "right" if vx > 0 else "left"
+    return "down" if vy > 0 else "up"
+
+
 class Sim:
     def __init__(self, cfg: Optional[SimConfig] = None) -> None:
         self.cfg = cfg or SimConfig()
@@ -264,7 +273,7 @@ class Sim:
             oy = (n // 2 - 0.5) * 0.9 if n_units > 2 else 0.0
             self.units.append(dict(id=self._nid, side=side, type=a["card"], lane=a["lane"], x=px + ox, y=py + oy,
                                    hp=float(c["hp"]), max=c["hp"], cd=0.4, val=c["cost"] / n_units, hit=0.0,
-                                   born=self.t, atk=None))
+                                   born=self.t, atk=None, dir="up" if side == 0 else "down", act="walk"))
             self._nid += 1
         self.fx.append(dict(kind="deploy", side=side, type=a["card"], x=px, y=py, t=self.t, label=c["name"]))
 
@@ -339,6 +348,8 @@ class Sim:
             tr = tg["r"] if is_tower else CARDS[tg["type"]]["r"]
             u["cd"] -= dt
             if bd - tr - c["r"] <= c["range"]:
+                u["act"] = "attack"
+                u["dir"] = _facing(tg["x"] - u["x"], tg["y"] - u["y"], u["dir"])
                 if u["cd"] <= 0:
                     u["cd"] = c["cd"]
                     if c.get("splash"):
@@ -364,6 +375,8 @@ class Sim:
                     else:
                         tx = u["x"] + (lx - u["x"]) * 0.5
                 d = math.hypot(tx - u["x"], ty - u["y"]) or 1
+                u["act"] = "walk"
+                u["dir"] = _facing(tx - u["x"], ty - u["y"], u["dir"])
                 u["x"] += (tx - u["x"]) / d * c["speed"] * dt
                 u["y"] += (ty - u["y"]) / d * c["speed"] * dt
 
@@ -427,7 +440,7 @@ class Sim:
         return {
             "t": r(self.t), "dur": self.cfg.duration, "over": self.over, "winner": self.winner, "reason": self.reason,
             "units": [{k: (r(v) if isinstance(v, float) else v) for k, v in u.items() if k in
-                       ("id", "side", "type", "x", "y", "hp", "max", "atk", "hit")} for u in self.units],
+                       ("id", "side", "type", "x", "y", "hp", "max", "atk", "hit", "cd", "dir", "act")} for u in self.units],
             "towers": [{k: (r(v) if isinstance(v, float) else v) for k, v in tw.items() if k in
                         ("side", "kind", "x", "y", "hp", "max", "alive", "aim", "hit")} for tw in self.towers],
             "shots": [{k: (r(v) if isinstance(v, float) else v) for k, v in s.items()} for s in self.shots],

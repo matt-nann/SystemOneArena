@@ -1,6 +1,7 @@
 """HTTP surface. The service owns the game; browsers only watch.
 
     GET  /                       the viewer (web/index.html)
+    GET  /sprites/*              pixel-art atlas (tools/sprites.py)
     GET  /health, /ready
     GET  /api/config             players, models, whether this viewer may start a match
     GET  /api/stream             SSE: one `frame` event per streamed frame (Aven's brain-backend pattern)
@@ -18,6 +19,7 @@ from typing import Any, AsyncIterator, Optional
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Settings
 from .match import MatchInProgress, MatchRunner
@@ -36,6 +38,8 @@ def build_app(settings: Settings, runner: MatchRunner, *, lifespan: Any = None) 
     def may_start(authorization: Optional[str]) -> bool:
         token = settings.ARENA_ADMIN_TOKEN
         return not token or authorization == f"Bearer {token}"
+
+    app.mount("/sprites", StaticFiles(directory=WEB / "sprites"), name="sprites")
 
     @app.get("/health")
     async def health() -> dict:
